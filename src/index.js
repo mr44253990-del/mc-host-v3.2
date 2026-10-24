@@ -11,6 +11,7 @@ const Sec = require('./security');
 const sys = require('./sys');
 const insights = require('./insights');
 const Gateway = require('./gateway');
+const FCM = require('./fcm');
 const { genId } = require('./util');
 const TEMPLATES = require('./worker-templates');
 
@@ -56,12 +57,20 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
   const audit = (req, type, detail = '') => { const a = (store.data.audit ||= []); a.push({ t: Date.now(), ip: req.ip || '', type, detail: String(detail).slice(0, 160) }); if (a.length > 150) a.splice(0, a.length - 150); store.save(); };
   const origin = (req) => `${req.protocol}://${req.get('host')}`;
   const guard = (fn) => async (req, res) => { try { await fn(req, res); } catch (e) { fail(res, e.message || 'ত্রুটি', 500); } };
-  const ADMIN_ONLY = /^\/(tokens|settings|password|backup|restore|gdrive|hooks|reports|ai\/settings|gateway)(\/|$)/;
+  const ADMIN_ONLY = /^\/(tokens|settings|password|backup|restore|gdrive|hooks|reports|ai\/settings|gateway|fcm)(\/|$)/;
 
   const workers = new Workers(store, { max: MAX_WK });
   const ai = new Ai(store, workers);
   const gw = new Gateway(store);
   ai.gateway = gw; gw.ensureKey();
+  const fcm = new FCM(store);
+  gw.on('allfail', (msg) => fcm.notify('allfail', 'AI Gateway: সব provider ব্যর্থ', msg.slice(0, 300), 'allfail:' + msg.slice(0, 80)));
+  workers.on('event', (ev) => {
+    const n = ev.worker ? ev.worker.name : '';
+    if (ev.type === 'down') fcm.notify('down', `Worker বন্ধ: ${n}`, String(ev.reason || 'ত্রুটি').slice(0, 300), 'down:' + ev.worker.id);
+    else if (ev.type === 'up') fcm.notify('up', `Worker আবার চালু: ${n}`, 'স্বয়ংক্রিয়ভাবে ফিরে এসেছে', 'up:' + ev.worker.id);
+    else if (ev.type === 'errorrate') fcm.notify('errorrate', `ত্রুটির হার বেশি: ${n}`, `${ev.errors} / ${ev.total} রিকোয়েস্ট ত্রুটি`, 'errorrate:' + ev.worker.id);
+  });
   const gd = new GDrive(store);
   const withWk = (fn) => guard(async (req, res) => { const w = workers.get(req.params.id); if (!w) return fail(res, 'Worker পাওয়া যায়নি', 404); return fn(w, req, res); });
   const tzOf = (req) => Number(req.query.tz) || 0;
@@ -118,20 +127,23 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
     if (!v1Auth(req, res)) return;
     const b = req.body || {};
     if (!Array.isArray(b.messages) || !b.messages.length) return res.status(400).json({ error: { message: 'messages দিন', type: 'invalid_request_error' } });
-    const messages = b.messages.slice(-60).map((m) => ({ role: String(m.role || 'user'), content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }));
+    const messages = b.messages.slice(-80);
+    const opts = { max_tokens: Number(b.max_tokens) || 1500, temperature: b.temperature, src: 'api' };
+    if (b.stream) { // আসল স্ট্রিম: প্রথম চাঙ্ক আসার আগে ব্যর্থ হলে পরেরটায় যায়
+      const it = gw.streamChat(messages, opts)[Symbol.asyncIterator]();
+      let first;
+      try { first = await it.next(); } catch (e) { return res.status(e.status === 400 ? 400 : 503).json({ error: { message: e.message, type: 'gateway_error' } }); }
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'x-accel-buffering': 'no' });
+      try { if (!first.done) res.write(first.value); for (;;) { const n = await it.next(); if (n.done) break; res.write(n.value); } }
+      catch (e) { res.write(`data: ${JSON.stringify({ error: { message: e.message } })}\n\n`); res.write('data: [DONE]\n\n'); }
+      return res.end();
+    }
     let r;
-    try { r = await gw.chat(messages, { max_tokens: Number(b.max_tokens) || 1500, temperature: b.temperature, src: 'api' }); }
+    try { r = await gw.chat(messages, opts); }
     catch (e) { return res.status(e.status === 400 ? 400 : 503).json({ error: { message: e.message, type: 'gateway_error' } }); }
     const id = 'chatcmpl-' + genId() + genId(); const created = Math.floor(Date.now() / 1000);
-    const msg = { role: 'assistant', content: r.text };
     res.setHeader('x-mc-provider', encodeURIComponent(r.provider)); res.setHeader('x-mc-fallbacks', String(r.fallbacks));
-    if (b.stream) {
-      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
-      res.write('data: ' + JSON.stringify({ id, object: 'chat.completion.chunk', created, model: gw.cfg().model, choices: [{ index: 0, delta: msg, finish_reason: null }] }) + '\n\n');
-      res.write('data: ' + JSON.stringify({ id, object: 'chat.completion.chunk', created, model: gw.cfg().model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) + '\n\n');
-      return res.end('data: [DONE]\n\n');
-    }
-    res.json({ id, object: 'chat.completion', created, model: gw.cfg().model, choices: [{ index: 0, message: msg, finish_reason: 'stop' }], usage: { prompt_tokens: r.usage.prompt_tokens || 0, completion_tokens: r.usage.completion_tokens || 0, total_tokens: r.usage.total_tokens || 0 }, x_provider_no: r.providerNo, x_fallbacks: r.fallbacks });
+    res.json({ id, object: 'chat.completion', created, model: gw.cfg().model, choices: [{ index: 0, message: { role: 'assistant', content: r.text }, finish_reason: 'stop' }], usage: { prompt_tokens: r.usage.prompt_tokens || 0, completion_tokens: r.usage.completion_tokens || 0, total_tokens: r.usage.total_tokens || 0 }, x_provider_no: r.providerNo, x_model: r.model, x_fallbacks: r.fallbacks });
   }));
 
   // ---------- পাবলিক: Google Drive OAuth কলব্যাক ----------
@@ -218,7 +230,15 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
   // ---------- AI Gateway (শুধু মালিক) ----------
   app.get('/api/gateway', (req, res) => ok(res, { gateway: gw.summary(origin(req)), presets: gw.presets() }));
   app.post('/api/gateway/key/rotate', (req, res) => { const k = gw.rotateKey(); audit(req, 'gateway-key-rotate', ''); ok(res, { key: k }); });
-  app.put('/api/gateway/settings', (req, res) => { const m = String((req.body || {}).model || '').trim().slice(0, 80); if (m) gw.cfg().model = m; store.save(); ok(res); });
+  app.put('/api/gateway/settings', (req, res) => {
+    const b = req.body || {}; const c = gw.cfg();
+    if (typeof b.model === 'string' && b.model.trim()) c.model = b.model.trim().slice(0, 80);
+    if (b.strategy === 'sticky' || b.strategy === 'roundrobin') c.strategy = b.strategy;
+    if (typeof b.systemPrompt === 'string') c.systemPrompt = b.systemPrompt.slice(0, 4000);
+    store.save(); ok(res);
+  });
+  app.get('/api/gateway/backup', (req, res) => { res.setHeader('Content-Disposition', 'attachment; filename="mc-host-ai-gateway.json"'); res.json(gw.backup()); });
+  app.post('/api/gateway/restore', express.json({ limit: '5mb' }), guard(async (req, res) => { const r = gw.restore(req.body); audit(req, 'gateway-restore', r.providers + ' providers'); ok(res, r); }));
   app.post('/api/gateway/providers', guard(async (req, res) => {
     let p; try { p = gw.addProvider(req.body || {}); } catch (e) { return fail(res, e.message); }
     await gw.test(p);
@@ -229,6 +249,7 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
     const p = gw.find(req.params.id); if (!p) return fail(res, 'provider নেই', 404);
     const b = req.body || {};
     if (b.model !== undefined) p.model = String(b.model).slice(0, 200);
+    if (Array.isArray(b.useModels)) gw.setModels(p, b.useModels);
     if (b.enabled !== undefined) p.enabled = !!b.enabled;
     if (b.name !== undefined) p.name = String(b.name).trim().slice(0, 40) || p.name;
     if (b.apiKey !== undefined && String(b.apiKey).trim().length >= 8) { p.apiKey = String(b.apiKey).trim(); p.status = 'untested'; gw.cool.delete(p.id); }
@@ -236,6 +257,23 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
   });
   app.delete('/api/gateway/providers/:id', (req, res) => { gw.remove(req.params.id); audit(req, 'gateway-remove', req.params.id); ok(res); });
   app.post('/api/gateway/providers/:id/test', guard(async (req, res) => { const p = gw.find(req.params.id); if (!p) return fail(res, 'provider নেই', 404); await gw.test(p); ok(res, { status: p.status, lastError: p.lastError, models: p.models || [], latency: p.latency, credits: p.credits }); }));
+  app.post('/api/gateway/chat-stream', guard(async (req, res) => {
+    const text = String((req.body || {}).text || '').trim(); if (!text) return fail(res, 'মেসেজ ফাঁকা');
+    const it = gw.streamChat([{ role: 'user', content: text }], { src: 'panel' })[Symbol.asyncIterator]();
+    let first; try { first = await it.next(); } catch (e) { return fail(res, e.message, 503); }
+    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', 'x-accel-buffering': 'no' });
+    try { if (!first.done) res.write(first.value); for (;;) { const n = await it.next(); if (n.done) break; res.write(n.value); } }
+    catch (e) { res.write(`data: ${JSON.stringify({ error: { message: e.message } })}\n\n`); }
+    res.end();
+  }));
+  // Firebase Cloud Messaging
+  app.get('/api/fcm', (req, res) => ok(res, { fcm: fcm.status() }));
+  app.post('/api/fcm/service-account', (req, res) => { try { const r = fcm.setServiceAccount((req.body || {}).json); audit(req, 'fcm-sa', r.projectId); ok(res, r); } catch (e) { fail(res, e.message); } });
+  app.delete('/api/fcm/service-account', (req, res) => { fcm.clearServiceAccount(); audit(req, 'fcm-sa-remove', ''); ok(res); });
+  app.post('/api/fcm/tokens', (req, res) => { try { fcm.addToken((req.body || {}).token, (req.body || {}).name); ok(res); } catch (e) { fail(res, e.message); } });
+  app.delete('/api/fcm/tokens/:id', (req, res) => { fcm.removeToken(req.params.id); ok(res); });
+  app.put('/api/fcm/events', (req, res) => { fcm.setEvents(req.body || {}); ok(res); });
+  app.post('/api/fcm/test', guard(async (req, res) => { const r = await fcm.send('MC Host: পরীক্ষা', 'নোটিফিকেশন ঠিকভাবে পৌঁছাচ্ছে', { force: true, data: { type: 'test' } }); if (r.skipped) return fail(res, r.skipped === 'not-configured' ? 'আগে service account JSON ও device token যোগ করুন' : r.skipped); ok(res, r); }));
   app.post('/api/gateway/test-all', guard(async (req, res) => { for (const p of gw.providers()) await gw.test(p); ok(res); }));
   app.post('/api/gateway/chat', guard(async (req, res) => {
     const text = String((req.body || {}).text || '').trim(); if (!text) return fail(res, 'মেসেজ ফাঁকা');
