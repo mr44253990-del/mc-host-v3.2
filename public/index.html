@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070914">
+<title>MC Host · Workers</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<style>
+:root{--bg:#070914;--t1:#eef1ff;--t2:#a4abd0;--t3:#6a7099;--glass:rgba(255,255,255,.055);--glass2:rgba(255,255,255,.1);--line:rgba(255,255,255,.12);--a1:#7c5cff;--a2:#27d3ff;--a3:#ff5cae;--ok:#35e6a0;--warn:#ffb94a;--bad:#ff5a73;--r:20px;--font:'Segoe UI',system-ui,-apple-system,'Noto Sans Bengali','Hind Siliguri',sans-serif;--mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+:root[data-theme="light"]{--bg:#eef0fb;--t1:#161a36;--t2:#4a5180;--t3:#7a80a8;--glass:rgba(255,255,255,.62);--glass2:rgba(255,255,255,.88);--line:rgba(30,40,100,.14)}
+:root[data-accent="sunset"]{--a1:#ff7a45;--a2:#ff3d81;--a3:#ffc94a}
+:root[data-accent="ocean"]{--a1:#2b8cff;--a2:#14e1d0;--a3:#6a5cff}
+:root[data-accent="emerald"]{--a1:#10d98c;--a2:#36e2ff;--a3:#b6ff5c}
+:root[data-accent="mono"]{--a1:#9aa4c7;--a2:#e3e7fb;--a3:#6b7399}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--t1);font-family:var(--font);font-size:14px;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(900px 520px at 12% -8%,color-mix(in srgb,var(--a1) 30%,transparent),transparent 70%),radial-gradient(800px 520px at 100% 8%,color-mix(in srgb,var(--a2) 22%,transparent),transparent 70%),radial-gradient(1000px 600px at 50% 125%,color-mix(in srgb,var(--a3) 20%,transparent),transparent 70%)}
+#fx{position:fixed;inset:0;z-index:0;pointer-events:none}
+svg.i{width:1.15em;height:1.15em;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.hide{display:none!important}
+#app{position:relative;z-index:2;height:100%;display:flex}
+aside{width:228px;padding:16px;display:flex;flex-direction:column;gap:6px;flex:none;margin:12px 0 12px 12px}
+.brand{display:flex;align-items:center;gap:11px;padding:6px 8px 16px}
+.logo{width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,var(--a1),var(--a2));display:grid;place-items:center;box-shadow:0 10px 26px -10px var(--a1)}
+.brand h1{font-size:16px;margin:0}.brand small{color:var(--t3);font-size:11px}
+.nv{display:flex;align-items:center;gap:11px;padding:10px 13px;border-radius:13px;color:var(--t2);cursor:pointer;border:1px solid transparent;background:none;text-align:left;transition:.2s;width:100%}
+.nv:hover{background:var(--glass);color:var(--t1)}
+.nv.on{background:linear-gradient(135deg,color-mix(in srgb,var(--a1) 28%,transparent),color-mix(in srgb,var(--a2) 14%,transparent));border-color:var(--line);color:var(--t1)}
+.sp{flex:1}
+main{flex:1;min-width:0;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:12px;padding:18px 24px 6px}
+header h2{margin:0;font-size:21px;flex:1}
+#view{flex:1;overflow:auto;padding:10px 24px 40px}
+#view::-webkit-scrollbar{width:8px}#view::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
+.g{background:var(--glass);border:1px solid var(--line);border-radius:var(--r);backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%);box-shadow:0 18px 44px -26px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.1);position:relative}
+.p{padding:18px}
+.grid{display:grid;gap:14px}
+.k4{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.c3{grid-template-columns:repeat(auto-fill,minmax(290px,1fr))}
+.c2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.row{display:flex;align-items:center;gap:10px}.wrap{flex-wrap:wrap}.col{display:flex;flex-direction:column;gap:12px}
+.mut{color:var(--t2)}.dim{color:var(--t3);font-size:12px}.mono{font-family:var(--mono)}
+.h3{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin:0 0 12px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:13px;border:1px solid var(--line);background:var(--glass2);cursor:pointer;transition:.18s;white-space:nowrap;text-decoration:none}
+.btn:hover{transform:translateY(-1px);border-color:rgba(255,255,255,.3)}.btn:active{transform:scale(.97)}
+.btn.pri{background:linear-gradient(135deg,var(--a1),var(--a2));border-color:transparent;color:#fff;box-shadow:0 10px 26px -10px var(--a1)}
+.btn.ok{background:rgba(53,230,160,.15);border-color:rgba(53,230,160,.4);color:var(--ok)}
+.btn.bad{background:rgba(255,90,115,.13);border-color:rgba(255,90,115,.4);color:var(--bad)}
+.btn.sm{padding:6px 11px;border-radius:11px;font-size:13px}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.in{width:100%;padding:10px 13px;border-radius:12px;border:1px solid var(--line);background:rgba(0,0,0,.18);outline:none;transition:.2s}
+:root[data-theme="light"] .in{background:rgba(255,255,255,.7)}
+.in:focus{border-color:var(--a2);box-shadow:0 0 0 3px color-mix(in srgb,var(--a2) 20%,transparent)}
+textarea.in{resize:vertical;font-family:var(--mono);font-size:12.5px;line-height:1.55}
+label{display:block;font-size:12px;color:var(--t3);margin:0 0 6px}
+.sw{width:44px;height:25px;border-radius:20px;background:var(--glass2);border:1px solid var(--line);position:relative;cursor:pointer;transition:.25s;flex:none}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;background:#fff;transition:.25s}
+.sw.on{background:linear-gradient(135deg,var(--a1),var(--a2))}.sw.on::after{left:21px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:20px;font-size:12px;border:1px solid var(--line);background:var(--glass)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--t3);flex:none}
+.st-running .dot{background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:pulse 2s infinite}
+.st-sleeping .dot{background:var(--a2)}
+.st-starting .dot{background:var(--warn);animation:pulse 1s infinite}
+.st-error .dot{background:var(--bad)}
+@keyframes pulse{70%{box-shadow:0 0 0 8px transparent}}
+.tile{padding:16px;overflow:hidden}.tile .lbl{color:var(--t3);font-size:12px}.tile .val{font-size:30px;font-weight:700;margin:6px 0 2px;letter-spacing:-.4px}.tile .sub{color:var(--t3);font-size:12px}
+.wcard{padding:16px;cursor:pointer;transition:.2s}.wcard:hover{transform:translateY(-2px)}
+.nm{font-size:16px;font-weight:650}
+.bar{height:7px;border-radius:8px;background:rgba(0,0,0,.25);overflow:hidden}.bar i{display:block;height:100%;border-radius:8px;background:linear-gradient(90deg,var(--a1),var(--a2));transition:width .6s}
+.tabs{display:flex;gap:6px;padding:5px;border-radius:15px;background:rgba(0,0,0,.18);width:max-content;max-width:100%;overflow:auto;margin-bottom:14px}
+.tab{padding:7px 14px;border-radius:11px;cursor:pointer;color:var(--t2);background:none;border:0;white-space:nowrap}
+.tab.on{background:var(--glass2);color:var(--t1)}
+.term{background:#05060e;border:1px solid var(--line);border-radius:14px;padding:12px;font-family:var(--mono);font-size:12px;line-height:1.6;height:340px;overflow:auto;color:#b9c2ff;white-space:pre-wrap;word-break:break-all}
+:root[data-theme="light"] .term{background:#eef0fb;color:#2b3370}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}.tbl td,.tbl th{padding:7px 9px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}.tbl th{color:var(--t3);font-weight:500}
+.hot{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;align-items:end;height:90px}
+.hot i{border-radius:4px 4px 2px 2px;background:linear-gradient(180deg,var(--a2),var(--a1));min-height:2px;transition:height .5s}
+.alert{padding:11px 13px;border-radius:13px;border:1px solid var(--line)}.alert.ok{background:rgba(53,230,160,.12);border-color:rgba(53,230,160,.4)}.alert.bad{background:rgba(255,90,115,.12);border-color:rgba(255,90,115,.4)}.alert.warn{background:rgba(255,185,74,.12);border-color:rgba(255,185,74,.4)}
+.ins{display:flex;gap:11px;align-items:flex-start;padding:10px 12px;border-radius:13px;background:rgba(0,0,0,.16);border:1px solid var(--line)}
+.ins>i{width:4px;align-self:stretch;border-radius:4px;background:var(--c,var(--a2));box-shadow:0 0 10px var(--c,var(--a2));flex:none}
+.fr{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:9px;cursor:pointer;font-size:13px}
+.fr:hover{background:var(--glass2)}.fr.on{background:linear-gradient(135deg,color-mix(in srgb,var(--a1) 28%,transparent),color-mix(in srgb,var(--a2) 14%,transparent))}
+.fr .fn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}.fr small{color:var(--t3);font-size:11px}
+.fm{display:grid;grid-template-columns:290px 1fr;gap:14px;align-items:start}
+.fm-tree{max-height:460px;overflow:auto}
+.code{min-height:430px!important;white-space:pre;tab-size:2}
+.chat{display:flex;flex-direction:column;gap:10px;height:380px;overflow:auto;padding:4px}
+.msg{max-width:86%;padding:11px 14px;border-radius:16px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.msg.u{align-self:flex-end;background:linear-gradient(135deg,var(--a1),#5a45d6);color:#fff}
+.msg.a{align-self:flex-start;background:var(--glass2);border:1px solid var(--line)}
+.ov{position:fixed;inset:0;z-index:50;background:rgba(3,4,12,.6);backdrop-filter:blur(8px);display:grid;place-items:center;padding:16px}
+.md{width:min(560px,100%);max-height:92vh;overflow:auto;padding:22px}
+#toasts{position:fixed;right:16px;top:16px;z-index:90;display:flex;flex-direction:column;gap:8px}
+.toast{padding:11px 15px;border-radius:14px;background:var(--glass2);border:1px solid var(--line);backdrop-filter:blur(18px);max-width:340px}
+.toast.bad{border-color:rgba(255,90,115,.5)}.toast.ok{border-color:rgba(53,230,160,.5)}
+#login{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:20px}
+#login .g{width:min(370px,100%);padding:30px;text-align:center}
+.empty{text-align:center;padding:40px 18px;color:var(--t2)}
+.mnav{display:none}
+@media(max-width:860px){aside{display:none}.mnav{display:flex;position:fixed;left:10px;right:10px;bottom:max(10px,env(safe-area-inset-bottom));z-index:20;padding:7px;gap:3px;justify-content:space-around;margin:0}.mnav .nv{flex-direction:column;gap:3px;font-size:10.5px;padding:7px 4px;justify-content:center;flex:1;text-align:center}header{padding:12px 14px 4px}#view{padding:8px 14px 110px}.fm{grid-template-columns:1fr}.hot{grid-template-columns:repeat(12,1fr)}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<canvas id="fx"></canvas>
+<div id="toasts"></div>
+
+<div id="login" class="hide">
+  <div class="g">
+    <div class="logo" style="margin:0 auto 16px;width:52px;height:52px;border-radius:17px"><svg class="i" viewBox="0 0 24 24" style="width:24px;height:24px"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></div>
+    <h2 style="margin:0 0 4px">MC Host Workers</h2>
+    <p class="mut" style="margin:0 0 18px">অ্যাডমিন পাসওয়ার্ড দিয়ে প্রবেশ করুন</p>
+    <form id="lgf" novalidate>
+      <input id="pw" class="in" type="password" placeholder="পাসওয়ার্ড" autocomplete="current-password" autocapitalize="off" enterkeyhint="go">
+      <div id="lg-err" style="margin-top:10px"></div>
+      <div id="lg-hint" class="dim" style="margin:10px 0 0;line-height:1.5"></div>
+      <button id="lg" type="submit" class="btn pri" style="width:100%;margin-top:14px;justify-content:center;padding:12px">প্রবেশ</button>
+    </form>
+  </div>
+</div>
+
+<div id="app" class="hide">
+  <aside class="g">
+    <div class="brand"><div class="logo"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></div><div><h1>MC Host</h1><small>Workers</small></div></div>
+    <nav id="nav" class="col" style="gap:5px"></nav>
+    <div class="sp"></div>
+    <div id="side-st" class="pill" style="margin:0 6px 8px"></div>
+    <button class="nv" id="theme"></button>
+    <button class="nv" id="out"></button>
+  </aside>
+  <main>
+    <header><h2 id="title"></h2><span id="hdr"></span></header>
+    <div id="view"></div>
+  </main>
+  <nav class="mnav g" id="mnav"></nav>
+</div>
+
+<script>
+'use strict';
+const P = {
+  grid:'<rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>',
+  cloud:'<path d="M17.5 19H7a4 4 0 01-.7-7.94 5.5 5.5 0 0110.7-1.3A4.6 4.6 0 0117.5 19z"/>',
+  chip:'<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+  ram:'<rect x="3" y="7" width="18" height="10" rx="2"/><path d="M7 11v2M11 11v2M15 11v2M6 17v3M18 17v3"/>',
+  pulse:'<path d="M3 12h4l2.5-7 4 14 2.5-7H21"/>',
+  spark:'<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>', play:'<path d="M7 4.5v15l12-7.5z"/>', stop:'<rect x="6" y="6" width="12" height="12" rx="2.5"/>',
+  redo:'<path d="M20 11a8 8 0 10-2.3 5.7"/><path d="M20 4v7h-7"/>', trash:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  up:'<path d="M12 16V4M7 9l5-5 5 5M5 20h14"/>', down:'<path d="M12 4v12M7 11l5 5 5-5M5 20h14"/>',
+  file:'<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/>',
+  folder:'<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
+  check:'<path d="M5 12.5l4.5 4.5L19 7"/>', x:'<path d="M6 6l12 12M18 6L6 18"/>', copy:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2"/>',
+  edit:'<path d="M4 20h4L19 9a2.8 2.8 0 00-4-4L4 16z"/>', undo:'<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/>',
+  bolt:'<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>', key:'<circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L21 2M16 7l3 3M14 9l2 2"/>',
+  send:'<path d="M21 3L10 14"/><path d="M21 3l-7 18-4-7-7-4z"/>', search:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+  out:'<path d="M15 4h3a2 2 0 012 2v12a2 2 0 01-2 2h-3M10 8l-4 4 4 4M6 12h11"/>', globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/>',
+  shield:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>', warn:'<path d="M12 3L2 20h20z"/><path d="M12 10v4M12 17.5v.1"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', moon:'<path d="M20 14.5A8.5 8.5 0 019.5 4a8.5 8.5 0 1010.5 10.5z"/>', sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/>',
+  link:'<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>',
+};
+const ic = (n, c = '') => `<svg class="i ${c}" viewBox="0 0 24 24">${P[n] || ''}</svg>`;
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nf = (n) => Number(n || 0).toLocaleString('en-US');
+const kb = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 1024 ? (n / 1024).toFixed(1) + ' KB' : n + ' B');
+const fmt = (ms) => { const t = Math.max(0, Math.floor(ms / 1000)), d = Math.floor(t / 86400), h = Math.floor(t % 86400 / 3600), m = Math.floor(t % 3600 / 60), s = t % 60; return d ? `${d}দিন ${h}ঘ` : h ? `${h}ঘ ${m}মি` : m ? `${m}মি ${s}সে` : `${s}সে`; };
+const tzo = () => new Date().getTimezoneOffset();
+const pct = (a, b) => (b ? (a / b * 100).toFixed(1) : '0.0');
+const avgMs = (o) => (o && o.req ? Math.round(o.ms / o.req) : 0);
+async function api(path, method = 'GET', body) {
+  const headers = {}; if (body !== undefined && !(body instanceof ArrayBuffer) && !(body instanceof Blob)) headers['Content-Type'] = 'application/json';
+  try { const tk = localStorage.getItem('mch-token'); if (tk) headers['x-mch-token'] = tk; } catch { /* ignore */ }
+  const payload = body === undefined ? undefined : (body instanceof ArrayBuffer || body instanceof Blob) ? body : JSON.stringify(body);
+  const r = await fetch('/api' + path, { method, headers, body: payload, credentials: 'same-origin' });
+  const j = await r.json().catch(() => ({ ok: false, error: 'সার্ভার উত্তর দেয়নি' }));
+  if (r.status === 401 && path !== '/login') showLogin();
+  return j;
+}
+async function apiBlob(path) { const headers = {}; try { const tk = localStorage.getItem('mch-token'); if (tk) headers['x-mch-token'] = tk; } catch { /* ignore */ } const r = await fetch('/api' + path, { headers, credentials: 'same-origin' }); if (!r.ok) throw new Error('ডাউনলোড ব্যর্থ'); return r.blob(); }
+function saveBlob(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800); }
+function toast(msg, kind = '') { const t = document.createElement('div'); t.className = 'toast ' + kind; t.textContent = msg; $('#toasts').append(t); setTimeout(() => t.remove(), 3600); }
+function modal(html, wide) { const o = document.createElement('div'); o.className = 'ov'; o.innerHTML = `<div class="g md" style="${wide ? 'width:min(760px,100%)' : ''}">${html}</div>`; o.addEventListener('mousedown', (e) => { if (e.target === o) o.remove(); }); document.body.append(o); return o; }
+function confirmBox(text, fn) { const o = modal(`<p style="margin:0 0 18px;font-size:15px">${esc(text)}</p><div class="row" style="justify-content:flex-end"><button class="btn" data-c>না</button><button class="btn bad" data-y>হ্যাঁ</button></div>`); $('[data-c]', o).onclick = () => o.remove(); $('[data-y]', o).onclick = () => { o.remove(); fn(); }; }
+function copyText(t) { const fb = () => { const a = document.createElement('textarea'); a.value = t; a.style.cssText = 'position:fixed;opacity:0'; document.body.append(a); a.select(); try { document.execCommand('copy'); } catch { /* ignore */ } a.remove(); toast('কপি হয়েছে', 'ok'); }; try { navigator.clipboard.writeText(t).then(() => toast('কপি হয়েছে', 'ok'), fb); } catch { fb(); } }
+const STL = { running: 'চলছে', sleeping: 'ঘুমন্ত', stopped: 'বন্ধ', error: 'ত্রুটি', starting: 'চালু হচ্ছে' };
+const pill = (st) => `<span class="pill st-${st}"><span class="dot"></span>${STL[st] || st}</span>`;
+function ring(v, size = 64) { const r = size / 2 - 6, c = 2 * Math.PI * r, col = v > 70 ? 'var(--ok)' : v > 40 ? 'var(--warn)' : 'var(--bad)'; return `<div style="position:relative;width:${size}px;height:${size}px;flex:none"><svg width="${size}" height="${size}" style="transform:rotate(-90deg)"><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="6"/><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${col}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - Math.max(0, Math.min(100, v)) / 100)}" style="transition:stroke-dashoffset .8s"/></svg><b style="position:absolute;inset:0;display:grid;place-items:center;font-size:${size > 60 ? 15 : 12}px">${Math.round(v)}</b></div>`; }
+function bars(items, color, H = 110) {
+  const W = 600, max = Math.max(1, ...items.map((x) => x.req)), bw = W / Math.max(1, items.length);
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${items.map((x, i) => { const h = Math.max(x.req ? 3 : 1, x.req / max * (H - 22)); return `<g><title>${esc(x.label)}: ${x.req} রিকোয়েস্ট${x.err ? ', ' + x.err + ' ত্রুটি' : ''}</title><rect x="${i * bw + bw * .14}" y="${H - 16 - h}" width="${bw * .72}" height="${h}" rx="3" fill="${color}" opacity="${x.req ? .88 : .16}"/>${x.tick ? `<text x="${i * bw + bw / 2}" y="${H - 3}" font-size="11" text-anchor="middle" fill="currentColor" opacity=".5">${esc(x.tick)}</text>` : ''}</g>`; }).join('')}</svg>`;
+}
+const SP = '▁▂▃▄▅▆▇█'; const spark = (arr) => { const m = Math.max(1, ...arr); return arr.map((v) => (v <= 0 ? '▁' : SP[Math.min(7, Math.floor(v / m * 7.99))])).join(''); };
+
+/* ---------- রাউটিং ও অবস্থা ---------- */
+let S = null, route = { page: 'dash' }, busy = false;
+const NAV = [['dash', 'grid', 'ড্যাশবোর্ড'], ['workers', 'cloud', 'Workers'], ['gateway', 'spark', 'AI Gateway'], ['settings', 'gear', 'সেটিংস']];
+function parseHash() {
+  const h = (location.hash || '').replace(/^#\/?/, '');
+  const m = h.match(/^w\/([\w-]+)(?:\/(\w+))?$/);
+  if (m) return { page: 'worker', id: m[1], tab: m[2] || 'overview' };
+  if (h.startsWith('workers')) return { page: 'workers' };
+  if (h.startsWith('settings')) return { page: 'settings' };
+  if (h.startsWith('gateway')) return { page: 'gateway' };
+  return { page: 'dash' };
+}
+const go = (hash) => { location.hash = hash; };
+function buildNav() {
+  const cur = route.page === 'worker' ? 'workers' : route.page;
+  $('#nav').innerHTML = NAV.map(([k, i, t]) => `<button class="nv ${cur === k ? 'on' : ''}" data-p="${k}">${ic(i)}<span>${t}</span></button>`).join('');
+  $('#mnav').innerHTML = NAV.map(([k, i, t]) => `<button class="nv ${cur === k ? 'on' : ''}" data-p="${k}">${ic(i)}<span>${t}</span></button>`).join('');
+  document.querySelectorAll('[data-p]').forEach((b) => (b.onclick = () => go(b.dataset.p === 'dash' ? '' : b.dataset.p)));
+  $('#theme').innerHTML = ic(document.documentElement.dataset.theme === 'light' ? 'moon' : 'sun') + '<span>থিম</span>';
+  $('#out').innerHTML = ic('out') + '<span>লগআউট</span>';
+}
+function showLogin() { stopLive(); $('#app').classList.add('hide'); $('#login').classList.remove('hide'); try { localStorage.removeItem('mch-token'); } catch { /* ignore */ } loginInfo(); setTimeout(() => $('#pw').focus(), 40); }
+async function loginInfo() { const r = await api('/login-info'); if (!r || !r.ok) return; $('#lg-hint').textContent = r.mode === 'auto' ? 'ADMIN_PASSWORD সেট নেই। সার্ভার কনসোলে ছাপা অটো পাসওয়ার্ড দিন।' : r.mode === 'env' ? 'পাসওয়ার্ড ADMIN_PASSWORD env থেকে আসছে।' : 'পাসওয়ার্ড ড্যাশবোর্ড থেকে বদলানো হয়েছে।'; if (r.wait) $('#lg-err').innerHTML = `<div class="alert bad">অনেকবার ভুল হয়েছে। ${Math.ceil(r.wait / 60)} মিনিট পরে চেষ্টা করুন</div>`; }
+$('#lgf').onsubmit = async (e) => {
+  e.preventDefault(); const r = await api('/login', 'POST', { password: $('#pw').value });
+  if (!r.ok) { $('#lg-err').innerHTML = `<div class="alert bad">${esc(r.error)}</div>`; return; }
+  try { if (r.token) localStorage.setItem('mch-token', r.token); } catch { /* ignore */ }
+  $('#pw').value = ''; $('#lg-err').innerHTML = ''; start();
+};
+$('#out').onclick = async () => { await api('/logout', 'POST'); showLogin(); };
+$('#theme').onclick = () => { const l = document.documentElement.dataset.theme === 'light'; document.documentElement.dataset.theme = l ? 'dark' : 'light'; try { localStorage.setItem('mch-theme', l ? 'dark' : 'light'); } catch { /* ignore */ } buildNav(); };
+
+function isEditing() { const ae = document.activeElement; return !!(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && $('#view') && $('#view').contains(ae)); }
+function applyState(j) {
+  const prev = S; S = j;
+  // ইনপুট বা এডিটরে কাজ চললে, বা ফর্ম/এডিটর/লগের ট্যাবে থাকলে পুরো পেজ নতুন করে আঁকা হবে না
+  const r0 = parseHash();
+  if (r0.page === 'gateway') { if (!isEditing() && !$('#app').classList.contains('hide')) renderGateway(true); return; }
+  if (isEditing() || (r0.page === 'worker' && r0.tab !== 'overview') || r0.page === 'settings') { if (!$('#app').classList.contains('hide')) { $('#side-st').innerHTML = `<span class="dot" style="background:${j.fleet.running ? 'var(--ok)' : 'var(--t3)'}"></span>${j.fleet.running}/${j.fleet.total} চলছে`; } return; }
+  if (!$('#app').classList.contains('hide')) {
+    const f = j.fleet;
+    $('#side-st').innerHTML = `<span class="dot" style="background:${f.running ? 'var(--ok)' : 'var(--t3)'}"></span>${f.running}/${f.total} চলছে`;
+    $('#side-st').className = 'pill';
+    $('#hdr').innerHTML = `<span class="pill">${ic('ram')}হোস্ট ${Math.round(j.host.usedMem / Math.max(1, j.host.totalMem) * 100)}%</span>`;
+  }
+  renderCurrent(prev && JSON.stringify(prev.workers) === JSON.stringify(j.workers) && prev.fleet.ram === j.fleet.ram);
+}
+async function refresh(pre) { const j = pre || await api('/state' + '?tz=' + tzo()); if (!j || !j.ok) return; applyState(j); }
+let _es = null, _sse = false, _poll = null;
+function startLive() {
+  clearInterval(_poll); _poll = setInterval(() => { if (!document.hidden && !_sse) refresh(); }, 3000);
+  if (!('EventSource' in window) || _es) return;
+  _es = new EventSource('/api/stream?tz=' + tzo());
+  _es.onopen = () => { _sse = true; };
+  _es.onmessage = (e) => { try { applyState(JSON.parse(e.data)); } catch { /* ignore */ } };
+  _es.onerror = () => { _sse = false; };
+}
+function stopLive() { if (_es) { _es.close(); _es = null; } _sse = false; clearInterval(_poll); }
+
+function renderCurrent(onlyLive) {
+  route = parseHash();
+  buildNav();
+  const titles = { dash: 'ড্যাশবোর্ড', workers: 'Workers', gateway: 'AI Gateway', settings: 'সেটিংস', worker: '' };
+  if (route.page === 'worker') { const w = S.workers.find((x) => x.id === route.id); $('#title').textContent = w ? w.name : 'Worker'; }
+  else $('#title').textContent = titles[route.page] || '';
+  if (route.page === 'dash') return renderDash(onlyLive);
+  if (route.page === 'workers') return renderWorkers(onlyLive);
+  if (route.page === 'settings') return renderSettings(onlyLive);
+  if (route.page === 'gateway') return renderGateway(onlyLive);
+  if (route.page === 'worker') return renderWorker(onlyLive);
+}
+window.addEventListener('hashchange', () => { if (S) renderCurrent(false); });
+
+/* ---------- ড্যাশবোর্ড ---------- */
+function renderDash(onlyLive) {
+  if (onlyLive && $('#dash')) { updateDashLive(); return; }
+  const f = S.fleet, h = S.host, usedPct = h.totalMem ? h.usedMem / h.totalMem * 100 : 0;
+  const hr = new Date().getHours(), greet = hr < 12 ? 'সুপ্রভাত' : hr < 17 ? 'শুভ অপরাহ্ন' : hr < 21 ? 'শুভ সন্ধ্যা' : 'শুভ রাত্রি';
+  const issues = S.insights.filter((x) => x.level === 'bad' || x.level === 'warn').length;
+  const cpuPct = h.cpus ? Math.min(100, h.load[0] / h.cpus * 100) : 0;
+  $('#view').innerHTML = `<div id="dash" class="col" style="gap:16px">
+  <div class="g p" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;background:linear-gradient(135deg,color-mix(in srgb,var(--a1) 22%,transparent),color-mix(in srgb,var(--a2) 9%,transparent)),var(--glass)">
+    <div style="flex:1;min-width:220px"><div class="dim">${greet} · ${new Date().toLocaleDateString('bn-BD', { weekday: 'long', day: 'numeric', month: 'long' })}</div><h3 style="font-size:24px;margin:4px 0">${issues ? issues + 'টি সতর্কতা আছে' : 'সব Worker স্বাভাবিক'}</h3><div class="mut" id="d-sum">${f.running} চলছে · ${f.sleeping} ঘুমন্ত · ${f.stopped} বন্ধ · মোট RAM ${nf(f.ram)}MB</div><div class="row wrap" style="margin-top:12px"><button class="btn pri sm" data-go="workers/new">${ic('plus')}নতুন Worker</button><button class="btn sm" data-bulk="start">${ic('play')}সব চালু</button><button class="btn sm" data-bulk="stop">${ic('stop')}সব বন্ধ</button></div></div>
+    <div class="row" style="gap:18px">${ring(100 - usedPct, 84)}<div><div class="dim">হোস্ট RAM ব্যবহার</div><b id="d-hram" style="font-size:20px">${nf(h.usedMem)} / ${nf(h.totalMem)} MB</b></div></div>
+  </div>
+  <div class="grid k4" id="d-kpi">
+    <div class="g tile"><div class="lbl">${ic('cloud')} Workers চলছে</div><div class="val" id="k-run">${f.running}<span style="font-size:16px;opacity:.6">/${f.total}</span></div><div class="sub" id="k-sleep">${f.sleeping} জন ঘুমন্ত (RAM খরচ নেই)</div></div>
+    <div class="g tile"><div class="lbl">${ic('ram')} Worker RAM মোট</div><div class="val" id="k-ram">${nf(f.ram)}<span style="font-size:16px;opacity:.6"> MB</span></div><div class="sub">প্রতি Worker-এর আলাদা RAM (চালু থাকলে প্রায় ৪০–৫০ MB বেস)</div></div>
+    <div class="g tile"><div class="lbl">${ic('pulse')} আজকের রিকোয়েস্ট</div><div class="val" id="k-req">${nf(f.todayReq)}</div><div class="sub" id="k-err">${nf(f.todayErr)} ত্রুটি (5xx)</div></div>
+    <div class="g tile"><div class="lbl">${ic('chip')} হোস্ট CPU লোড</div><div class="val" id="k-cpu">${h.load[0]}</div><div class="sub" id="k-cpu2">${h.cpus} CPU · Event-loop ${h.lag}ms</div></div>
+  </div>
+  <div class="grid c2">
+    <div class="g p"><div class="h3">হোস্ট রিসোর্স</div><div class="col" style="gap:12px">
+      <div><div class="row"><span style="flex:1">RAM</span><span class="mut" id="r-ram">${nf(h.usedMem)} / ${nf(h.totalMem)} MB</span></div><div class="bar"><i id="b-ram" style="width:${usedPct.toFixed(1)}%"></i></div></div>
+      <div><div class="row"><span style="flex:1">CPU লোড (১ মিনিট)</span><span class="mut" id="r-cpu">${h.load[0]} / ${h.cpus}</span></div><div class="bar"><i id="b-cpu" style="width:${cpuPct.toFixed(1)}%"></i></div></div>
+      <div class="dim" id="r-foot">Node ${esc(h.node)} · প্যানেল প্রসেস ${h.panelRss}MB · আপটাইম ${fmt(h.uptime)}</div>
+    </div></div>
+    <div class="g p"><div class="h3">স্মার্ট ইনসাইট</div><div class="col" style="gap:9px" id="d-ins">${insightsHtml()}</div></div>
+  </div>
+  <div class="g p"><div class="row wrap" style="margin-bottom:10px"><div class="h3" style="margin:0;flex:1">Worker-এর RAM ও CPU</div><button class="btn sm" data-go="workers">সব দেখুন</button></div>
+  ${S.workers.length ? `<table class="tbl"><tr><th>নাম</th><th>অবস্থা</th><th>RAM</th><th>সীমা</th><th>আজ</th><th>CPU/অনুরোধ</th><th>ত্রুটি</th><th>গড় সময়</th></tr>${S.workers.map((w) => `<tr style="cursor:pointer" data-open="${w.id}"><td><b>${esc(w.name)}</b></td><td>${pill(w.state)}</td><td class="mono">${w.ram ? nf(w.ram) + ' MB' : '—'}</td><td class="mono">${w.memoryMb} MB</td><td>${nf(w.today.req)}</td><td>${w.cpuPerReq} ms</td><td>${w.today.err}</td><td>${avgMs(w.today)} ms</td></tr>`).join('')}</table>` : '<div class="empty">এখনো কোনো Worker নেই</div>'}
+  </div></div>`;
+  bindCommon();
+}
+function insightsHtml() {
+  const lv = { bad: 'var(--bad)', warn: 'var(--warn)', info: 'var(--a2)', good: 'var(--ok)' };
+  return S.insights.map((x) => `<div class="ins" style="--c:${lv[x.level]}"><i></i><div style="flex:1;min-width:0"><b>${esc(x.title)}</b><div class="dim">${esc(x.text)}</div></div>${x.id ? `<button class="btn sm" data-open="${x.id}">খুলুন</button>` : ''}</div>`).join('') || '<div class="mut">কিছু নেই</div>';
+}
+function updateDashLive() {
+  const f = S.fleet, h = S.host, usedPct = h.totalMem ? h.usedMem / h.totalMem * 100 : 0, cpuPct = h.cpus ? Math.min(100, h.load[0] / h.cpus * 100) : 0;
+  const set = (id, v) => { const el = $('#' + id); if (el && el.textContent !== String(v)) el.textContent = v; };
+  set('d-sum', `${f.running} চলছে · ${f.sleeping} ঘুমন্ত · ${f.stopped} বন্ধ · মোট RAM ${nf(f.ram)}MB`);
+  set('d-hram', `${nf(h.usedMem)} / ${nf(h.totalMem)} MB`); set('r-ram', `${nf(h.usedMem)} / ${nf(h.totalMem)} MB`);
+  set('r-cpu', `${h.load[0]} / ${h.cpus}`); set('k-req', nf(f.todayReq)); set('k-err', `${nf(f.todayErr)} ত্রুটি (5xx)`);
+  set('k-ram', nf(f.ram)); set('k-cpu', h.load[0]); set('k-cpu2', `${h.cpus} CPU · Event-loop ${h.lag}ms`);
+  set('k-sleep', `${f.sleeping} জন ঘুমন্ত (RAM খরচ নেই)`); set('r-foot', `Node ${h.node} · প্যানেল প্রসেস ${h.panelRss}MB · আপটাইম ${fmt(h.uptime)}`);
+  const b1 = $('#b-ram'), b2 = $('#b-cpu'); if (b1) b1.style.width = usedPct.toFixed(1) + '%'; if (b2) b2.style.width = cpuPct.toFixed(1) + '%';
+  const ins = $('#d-ins'); if (ins) ins.innerHTML = insightsHtml(); bindCommon();
+}
+
+/* ---------- Worker তালিকা ---------- */
+let wFilter = '';
+function renderWorkers(onlyLive) {
+  if (onlyLive && $('#wlist')) { paintWorkerList(); return; }
+  $('#view').innerHTML = `<div class="col" style="gap:14px">
+    <div class="row wrap"><input class="in" id="wq" placeholder="Worker খুঁজুন" value="${esc(wFilter)}" style="max-width:280px">${ic('search')}<div class="sp"></div><span class="mut">${S.workers.length}/${S.max}</span><button class="btn sm" data-bulk="start">${ic('play')}সব চালু</button><button class="btn sm" data-bulk="stop">${ic('stop')}সব বন্ধ</button><button class="btn pri" id="wnew">${ic('plus')}নতুন Worker</button></div>
+    <div id="wlist"></div></div>`;
+  $('#wq').oninput = (e) => { wFilter = e.target.value; paintWorkerList(); };
+  $('#wnew').onclick = () => newWorkerModal();
+  paintWorkerList(); bindCommon();
+}
+function paintWorkerList() {
+  const el = $('#wlist'); if (!el) return;
+  const list = S.workers.filter((w) => !wFilter || w.name.toLowerCase().includes(wFilter.toLowerCase()) || w.slug.includes(wFilter.toLowerCase()));
+  el.innerHTML = list.length ? `<div class="grid c3">${list.map(workerCard).join('')}</div>` : `<div class="g empty">${ic('cloud')}<p>${S.workers.length ? 'মেলেনি' : 'এখনো কোনো Worker নেই। নতুন Worker তৈরি করুন।'}</p></div>`;
+  el.querySelectorAll('[data-open]').forEach((c) => (c.onclick = (e) => { if (e.target.closest('[data-act]')) return; go('w/' + c.dataset.open); }));
+  el.querySelectorAll('[data-act]').forEach((b) => (b.onclick = async (e) => { e.stopPropagation(); const r = await api(`/workers/${b.dataset.id}/${b.dataset.act}`, 'POST'); r.ok ? toast('সম্পন্ন', 'ok') : toast(r.error, 'bad'); refresh(); }));
+}
+function workerCard(w) {
+  const lim = w.memoryMb || 0, ramPct = lim && w.ram ? Math.min(100, w.ram / lim * 100) : 0;
+  const hot = w.today.req ? w.today.err / w.today.req * 100 : 0;
+  return `<div class="g wcard" data-open="${w.id}">
+    <div class="row"><div style="flex:1;min-width:0"><div class="nm">${esc(w.name)}</div><div class="mono dim" style="overflow:hidden;text-overflow:ellipsis">/w/${esc(w.slug)}</div></div>${pill(w.state)}</div>
+    <div class="col" style="gap:9px;margin-top:14px">
+      <div><div class="row"><span class="dim" style="flex:1">RAM</span><span class="mono">${w.ram ? nf(w.ram) : '0'} MB${lim ? ' / ' + lim + ' MB' : ' · সীমাহীন'}</span></div><div class="bar"><i style="width:${ramPct.toFixed(1)}%;${ramPct > 85 ? 'background:var(--bad)' : ''}"></i></div></div>
+      <div class="row wrap" style="gap:6px"><span class="pill">আজ ${nf(w.today.req)}</span><span class="pill" style="${hot > 5 ? 'color:var(--bad)' : ''}">ত্রুটি ${w.today.err}</span><span class="pill">${avgMs(w.today)} ms</span><span class="pill">${w.cpuPerReq} ms CPU</span>${w.idleMin > 0 ? `<span class="pill">${Math.round(w.idleMin * 60)} সে পর ঘুম</span>` : '<span class="pill">সব সময় চালু</span>'}</div>
+    </div>
+    <div class="row" style="margin-top:14px" onclick="event.stopPropagation()">${w.enabled ? `<button class="btn bad sm" data-act="stop" data-id="${w.id}">${ic('stop')}বন্ধ</button><button class="btn sm" data-act="restart" data-id="${w.id}">${ic('redo')}রিস্টার্ট</button>` : `<button class="btn ok sm" data-act="start" data-id="${w.id}">${ic('play')}চালু</button>`}<span class="sp"></span><a class="btn sm" href="/w/${esc(w.slug)}" target="_blank" rel="noopener">${ic('globe')}খুলুন</a></div></div>`;
+}
+function newWorkerModal() {
+  const tpls = (S.templates || []);
+  const o = modal(`<div class="row" style="margin-bottom:12px"><h3 style="margin:0;flex:1">নতুন Worker</h3><button class="btn sm" data-x>${ic('x')}</button></div>
+  <div class="col">
+    <div class="grid c2" style="gap:10px"><div><label>নাম</label><input class="in" id="nw-n" placeholder="my-api"><div class="dim mono" id="nw-u" style="margin-top:5px"></div></div>
+    <div><label>শুরু</label><select class="in" id="nw-t">${tpls.map((t) => `<option value="${t.key}">${esc(t.name)}</option>`).join('')}<option value="__upload">নিজের ফাইল/ZIP আপলোড</option></select></div></div>
+    <div class="grid c3" style="gap:10px"><div><label>RAM সীমা (MB, 0 = সীমাহীন)</label><input class="in" id="nw-m" type="number" min="0" value="0"></div><div><label>নিষ্ক্রিয় হলে ঘুম (সেকেন্ড, 0 = সব সময় চালু)</label><input class="in" id="nw-i" type="number" min="0" value="120"></div><div><label>দৈনিক রিকোয়েস্ট সীমা (0 = সীমাহীন)</label><input class="in" id="nw-d" type="number" min="0" value="0"></div></div>
+    <div><label>কোড (টেমপ্লেট বাছলে এখানে প্রিভিউ)</label><textarea class="in" id="nw-c" class="code" style="min-height:160px" spellcheck="false"></textarea></div>
+    <input type="file" id="nw-f" multiple hidden accept=".js,.mjs,.cjs,.json,.txt,.html,.css,.zip,.env,.md,.svg,.png,.jpg,.webp">
+    <div class="row wrap"><button class="btn sm" id="nw-up">${ic('up')}ফাইল/ZIP বাছুন</button><span class="dim" id="nw-fl"></span></div>
+    <div class="row" style="justify-content:flex-end"><button class="btn" data-x>বাতিল</button><button class="btn pri" id="nw-go">${ic('bolt')}তৈরি ও চালু</button></div>
+  </div>`, true);
+  let picked = null, pickedRaw = null;
+  const prev = () => { const s = ($('#nw-n', o).value || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); $('#nw-u', o).textContent = location.origin + '/w/' + (s || '...'); };
+  const fill = () => { $('#nw-c', o).disabled = $('#nw-t', o).value === '__upload'; picked = null; };
+  prev(); fill();
+  $('#nw-n', o).oninput = prev; $('#nw-t', o).onchange = fill;
+  $('[data-x]', o) && o.querySelectorAll('[data-x]').forEach((b) => (b.onclick = () => o.remove()));
+  $('#nw-up', o).onclick = () => $('#nw-f', o).click();
+  $('#nw-f', o).onchange = async (e) => {
+    const files = [...e.target.files]; if (!files.length) return;
+    const zipF = files.find((f) => /\.zip$/i.test(f.name));
+    picked = zipF ? { zip: zipF } : { files: await Promise.all(files.map(async (f) => ({ path: f.webkitRelativePath || f.name, content: await f.text() }))) };
+    $('#nw-t', o).value = '__upload'; $('#nw-c', o).disabled = true;
+    $('#nw-fl', o).textContent = zipF ? `ZIP: ${zipF.name}` : `${files.length}টি ফাইল`;
+    if (!$('#nw-n', o).value) { $('#nw-n', o).value = (zipF ? zipF.name : files[0].name).replace(/\.[^.]+$/, ''); prev(); }
+  };
+  $('#nw-go', o).onclick = async () => {
+    const name = $('#nw-n', o).value.trim(); if (!name) return toast('নাম দিন', 'bad');
+    const mem = Number($('#nw-m', o).value) || 0, idle = (Number($('#nw-i', o).value) || 0) / 60, daily = Number($('#nw-d', o).value) || 0;
+    const sel = $('#nw-t', o).value; let body = { name, memoryMb: mem, idleMin: idle, dailyLimit: daily };
+    if (picked && picked.zip) {
+      const created = await api('/workers', 'POST', { name, code: 'export default { fetch: () => new Response("ok") };', memoryMb: mem, idleMin: idle, dailyLimit: daily });
+      if (!created.ok) return toast(created.error, 'bad');
+      const up = await fetch(`/api/workers/${created.id}/import-zip?replace=1`, { method: 'POST', body: await picked.zip.arrayBuffer(), credentials: 'same-origin', headers: localToken() });
+      const r2 = await up.json(); o.remove(); toast(r2.ok ? `ZIP খোলা হয়েছে (${r2.written}টি ফাইল)` : r2.error, r2.ok ? 'ok' : 'bad');
+      await api(`/workers/${created.id}/deploy`, 'POST'); refresh(); go('w/' + created.id); return;
+    }
+    if (picked && picked.files) body.files = picked.files;
+    else if (sel === '__upload') return toast('ফাইল বা ZIP বাছুন', 'bad');
+    else body.template = sel;
+    if (!picked && $('#nw-c', o).value.trim() && sel === '__upload') body.code = $('#nw-c', o).value;
+    const r = await api('/workers', 'POST', body);
+    o.remove();
+    if (!r.ok) return toast(r.error, 'bad');
+    toast(r.deploy && r.deploy.ok ? 'Worker চালু হয়েছে' : 'তৈরি হয়েছে, কিন্তু চালু হয়নি: ' + String(r.deploy && r.deploy.error || '').split('\n')[0], r.deploy && r.deploy.ok ? 'ok' : 'bad');
+    refresh(); go('w/' + r.id);
+  };
+  setTimeout(() => $('#nw-n', o).focus(), 30);
+}
+function localToken() { try { const t = localStorage.getItem('mch-token'); return t ? { 'x-mch-token': t } : {}; } catch { return {}; } }
+
+/* ---------- Worker বিস্তারিত ---------- */
+const WT = [['overview', 'সারসংক্ষেপ'], ['files', 'ফাইল'], ['env', 'ENV'], ['versions', 'ভার্সন'], ['db', 'ডাটাবেস'], ['ai', 'AI'], ['logs', 'লগ'], ['test', 'টেস্ট'], ['settings', 'সেটিংস']];
+function renderWorker(onlyLive) {
+  const w = S.workers.find((x) => x.id === route.id);
+  if (!w) { $('#view').innerHTML = `<div class="g empty">Worker পাওয়া যায়নি</div>`; return; }
+  if (onlyLive && route.tab === 'overview' && $('#wov')) { updateWorkerLive(w); return; }
+  const head = `<div class="col" style="gap:14px">
+    <div class="row wrap"><button class="btn sm" data-go="workers">${ic('undo')}সব Worker</button><b style="font-size:19px">${esc(w.name)}</b>${pill(w.state)}<span class="sp"></span>
+      ${w.enabled ? `<button class="btn bad sm" data-wact="stop">${ic('stop')}বন্ধ</button><button class="btn sm" data-wact="restart">${ic('redo')}রিস্টার্ট</button>` : `<button class="btn ok sm" data-wact="start">${ic('play')}চালু</button>`}
+      <button class="btn pri sm" data-wact="deploy">${ic('bolt')}ডিপ্লয়</button></div>
+    <div class="row wrap"><span class="urlchip mono" style="padding:6px 10px;border-radius:12px;border:1px solid var(--line);background:rgba(0,0,0,.18);font-size:12.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis">${esc(location.origin)}/w/${esc(w.slug)}</span><button class="btn sm" data-copyurl="${esc(location.origin)}/w/${esc(w.slug)}">${ic('copy')}কপি</button></div>
+    <div class="tabs">${WT.map(([k, t]) => `<button class="tab ${route.tab === k ? 'on' : ''}" data-tab="${k}">${t}</button>`).join('')}</div>
+    <div id="wbody"></div></div>`;
+  $('#view').innerHTML = head;
+  $('#view').querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => go(`w/${w.id}/${b.dataset.tab}`)));
+  $('#view').querySelectorAll('[data-wact]').forEach((b) => (b.onclick = async () => { const a = b.dataset.wact; const r = await api(`/workers/${w.id}/${a}`, 'POST'); r.ok ? toast(a === 'deploy' ? 'ডিপ্লয় সফল' : 'সম্পন্ন', 'ok') : toast(r.error || 'ব্যর্থ', 'bad'); refresh(); }));
+  $('#view').querySelectorAll('[data-copyurl]').forEach((b) => (b.onclick = () => copyText(b.dataset.copyurl)));
+  const body = $('#wbody');
+  const map = { overview: wOverview, files: wFiles, env: wEnv, versions: wVersions, db: wDb, ai: wAi, logs: wLogs, test: wTest, settings: wSettings };
+  map[route.tab] ? map[route.tab](w, body) : wOverview(w, body);
+  bindCommon();
+}
+function updateWorkerLive(w) {
+  const set = (id, v) => { const el = $('#' + id); if (el && el.textContent !== String(v)) el.textContent = v; };
+  set('wo-ram', w.ram ? nf(w.ram) + ' MB' : '0 MB'); set('wo-req', nf(w.today.req)); set('wo-err', nf(w.today.err));
+  set('wo-cpu', w.cpuPerReq + ' ms'); set('wo-avg', avgMs(w.today) + ' ms');
+  const b = $('#wo-rambar'); if (b) b.style.width = (w.memoryMb ? Math.min(100, (w.ram || 0) / w.memoryMb * 100) : 0).toFixed(1) + '%';
+}
+async function wOverview(w, el) {
+  const r = await api(`/workers/${w.id}?tz=${tzo()}`); if (!r.ok) return toast(r.error, 'bad');
+  const a = r.agg, lat = r.lat, hr = a.hours.map((h, i) => ({ label: h.label, req: h.req, err: h.err, tick: i % 4 === 0 ? h.label : '' }));
+  const ram = w.ram || 0, lim = w.memoryMb || 0;
+  el.innerHTML = `<div id="wov" class="col" style="gap:14px">
+  <div class="grid k4">
+    <div class="g tile"><div class="lbl">RAM এখন</div><div class="val" id="wo-ram">${ram ? nf(ram) + ' MB' : '0 MB'}</div><div class="bar" style="margin-top:6px"><i id="wo-rambar" style="width:${lim ? Math.min(100, ram / lim * 100).toFixed(1) : 0}%"></i></div><div class="sub">${lim ? 'সীমা ' + lim + 'MB' : 'RAM সীমাহীন'} · ${w.state === 'sleeping' ? 'ঘুমন্ত, RAM খরচ নেই' : ''}</div></div>
+    <div class="g tile"><div class="lbl">আজকের রিকোয়েস্ট</div><div class="val" id="wo-req">${nf(w.today.req)}</div><div class="sub">গতকাল ${nf(w.yesterday.req)}${w.dailyLimit ? ` · সীমা ${nf(w.dailyLimit)}` : ''}</div></div>
+    <div class="g tile"><div class="lbl">ত্রুটি (5xx)</div><div class="val" id="wo-err">${nf(w.today.err)}</div><div class="sub">${pct(w.today.err, w.today.req)}% ত্রুটির হার</div></div>
+    <div class="g tile"><div class="lbl">CPU ও গড় সময়</div><div class="val" id="wo-cpu">${w.cpuPerReq} ms</div><div class="sub">গড় সময় <span id="wo-avg">${avgMs(w.today)} ms</span> · p95 ${lat.p95} ms</div></div>
+  </div>
+  <div class="grid c2"><div class="g p"><div class="h3">গত ২৪ ঘণ্টার রিকোয়েস্ট</div>${bars(hr, '#7c5cff')}</div>
+  <div class="g p"><div class="h3">মেমরি ও ঘুম</div><div class="col" style="gap:9px">
+    <div class="mut">RAM সীমা: <b>${lim ? lim + ' MB' : 'সীমাহীন'}</b> · বর্তমান: <b>${ram} MB</b></div>
+    <div class="mut">নিষ্ক্রিয় হলে ঘুমানো: <b>${w.idleMin > 0 ? Math.round(w.idleMin * 60) + ' সেকেন্ড পর' : 'সব সময় চালু (ঘুমায় না)'}</b></div>
+    <div class="mut">Cron: <b>${w.cronMin ? 'প্রতি ' + w.cronMin + ' মি (সবসময় জাগা)' : 'বন্ধ'}</b> · Rate limit: <b>${w.rateLimit ? w.rateLimit + '/মিনিট' : 'সীমাহীন'}</b> · দৈনিক: <b>${w.dailyLimit ? nf(w.dailyLimit) : 'সীমাহীন'}</b></div>
+    <div class="mut">ফাইল: <b>${w.fileCount}</b> (${kb(w.totalSize)}) · ENV: <b>${w.envCount}</b> · KV কী: <b>${w.kvKeys}</b></div>
+    <div class="mut">Entry: <span class="mono">${esc(w.entry)}</span></div>
+    <div class="row wrap" style="margin-top:6px"><button class="btn sm" id="ov-csv">${ic('down')}দৈনিক CSV (৩০ দিন)</button><button class="btn sm" data-tab="test">${ic('send')}রিকোয়েস্ট পাঠান</button></div>
+  </div></div></div>
+  <div class="grid c2"><div class="g p"><div class="h3">রিকোয়েস্টের সময়</div><div class="col" style="gap:7px">${[['p50', lat.p50], ['p95', lat.p95], ['p99', lat.p99]].map(([k, v]) => `<div class="row"><span class="mono" style="width:40px">${k}</span><div class="bar" style="flex:1"><i style="width:${Math.min(100, v / Math.max(1, lat.p99) * 100)}%"></i></div><span class="mono">${v} ms</span></div>`).join('')}</div></div>
+  <div class="g p"><div class="h3">সাম্প্রতিক রিকোয়েস্ট</div><div class="scr" style="max-height:230px;overflow:auto">${r.recent.length ? `<table class="tbl"><tr><th>সময়</th><th>মেথড</th><th>পাথ</th><th>স্ট্যাটাস</th><th>ms</th></tr>${r.recent.slice(0, 20).map((x) => `<tr><td>${new Date(x.t).toLocaleTimeString()}</td><td>${esc(x.method)}</td><td class="mono">${esc(x.path)}</td><td class="${x.status >= 500 ? 'mono' : ''}" style="color:${x.status >= 500 ? 'var(--bad)' : x.status >= 400 ? 'var(--warn)' : 'var(--ok)'}">${x.status}</td><td>${x.ms}</td></tr>`).join('')}</table>` : '<div class="mut">এখনো কোনো রিকোয়েস্ট আসেনি</div>'}</div></div></div></div>`;
+  $('#ov-csv', el).onclick = async () => { try { saveBlob(await apiBlob(`/workers/${w.id}/stats.csv?tz=${tzo()}`), w.slug + '-daily.csv'); } catch (e) { toast(e.message, 'bad'); } };
+  el.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => go(`w/${w.id}/${b.dataset.tab}`)));
+}
+
+/* ফাইল ম্যানেজার */
+const FX = { files: [], cur: null, open: new Set(), dirty: false, entry: '' };
+function wTree(files) { const root = { dirs: {}, files: [] }; for (const f of files) { const p = f.path.split('/'); let n = root; for (let i = 0; i < p.length - 1; i++) n = (n.dirs[p[i]] ||= { dirs: {}, files: [], path: p.slice(0, i + 1).join('/') }); n.files.push(f); } return root; }
+function treeHtml(n, d) { let h = ''; for (const k of Object.keys(n.dirs).sort()) { const dn = n.dirs[k], o = FX.open.has(dn.path); h += `<div class="fr" data-dir="${esc(dn.path)}" style="padding-left:${d * 14 + 6}px"><span style="width:10px;transform:rotate(${o ? 90 : 0}deg)">›</span>${ic('folder')}<span class="fn">${esc(k)}</span></div>${o ? treeHtml(dn, d + 1) : ''}`; } for (const f of n.files.sort((a, b) => a.path.localeCompare(b.path))) h += `<div class="fr ${FX.cur === f.path ? 'on' : ''}" data-file="${esc(f.path)}" style="padding-left:${d * 14 + 22}px">${ic('file')}<span class="fn">${esc(f.path.split('/').pop())}</span>${f.path === FX.entry ? '<span class="pill" style="padding:1px 7px">এন্ট্রি</span>' : ''}<small>${kb(f.size)}</small></div>`; return h; }
+async function wFiles(w, el) {
+  el.innerHTML = `<div class="fm"><div class="g p"><div class="row wrap" style="margin-bottom:10px;gap:6px"><div class="h3" style="margin:0;flex:1" id="fm-count"></div><input type="file" id="fm-in" multiple hidden><button class="btn sm" id="fm-up">${ic('up')}আপলোড</button><button class="btn sm" id="fm-new">${ic('plus')}নতুন</button></div>
+    <div class="fm-tree" id="fm-list"></div><div class="dim" style="margin-top:8px">একসাথে কয়েকটি ফাইল বাছুন বা ফোল্ডার/ZIP এখানে ছাড়ুন</div>
+    <div class="row wrap" style="margin-top:10px;gap:6px"><button class="btn sm" id="fm-exp">${ic('down')}ZIP</button></div></div>
+  <div class="g p"><div class="row wrap" style="margin-bottom:10px;gap:6px"><b class="mono" id="fm-name" style="flex:1">ফাইল বাছুন</b><span class="pill hide" id="fm-dirty" style="color:var(--warn)">অসংরক্ষিত</span><button class="btn sm hide" id="fm-entry">${ic('star')}এন্ট্রি করুন</button><button class="btn sm hide" id="fm-del">${ic('trash')}</button><button class="btn sm" id="fm-chk">${ic('check')}যাচাই</button><button class="btn sm" id="fm-test">${ic('send')}টেস্ট</button><button class="btn sm" id="fm-rev">${ic('spark')}AI রিভিউ</button><button class="btn sm hide" id="fm-save">${ic('check')}সেভ</button><button class="btn pri sm" id="fm-dep">${ic('bolt')}সেভ ও ডিপ্লয়</button></div>
+    <div id="fm-body"><div class="empty">বাঁ দিক থেকে ফাইল খুলুন</div></div><div id="fm-res" style="margin-top:10px"></div></div></div>`;
+  const list = $('#fm-list'); const res = (html) => { $('#fm-res').innerHTML = html; };
+  const paint = () => { list.innerHTML = treeHtml(wTree(FX.files), 0) || '<div class="dim" style="padding:10px">কোনো ফাইল নেই</div>'; $('#fm-count').textContent = FX.files.length + ' ফাইল'; };
+  const load = async (keep) => { const r = await api(`/workers/${w.id}/files`); if (!r.ok) return toast(r.error, 'bad'); FX.files = r.files; FX.entry = r.entry; if (!keep) FX.files.forEach((f) => { const p = f.path.split('/'); for (let i = 1; i < p.length; i++) FX.open.add(p.slice(0, i).join('/')); }); paint(); };
+  const hdr = () => { $('#fm-name').textContent = FX.cur || 'ফাইল বাছুন'; const code = !!$('#fm-code'); $('#fm-save').classList.toggle('hide', !code); $('#fm-del').classList.toggle('hide', !FX.cur); $('#fm-entry').classList.toggle('hide', !(FX.cur && /\.(m?js|cjs)$/.test(FX.cur) && FX.cur !== FX.entry)); };
+  const openFile = async (p) => {
+    if (FX.dirty && !confirm('সেভ না করা পরিবর্তন বাদ যাবে। চালিয়ে যাবেন?')) return;
+    const r = await api(`/workers/${w.id}/file?path=${encodeURIComponent(p)}`); if (!r.ok) return toast(r.error, 'bad');
+    FX.cur = p; FX.dirty = false; $('#fm-dirty').classList.add('hide');
+    if (r.text !== undefined) {
+      $('#fm-body').innerHTML = '<textarea class="in code" id="fm-code" spellcheck="false"></textarea>';
+      const t = $('#fm-code'); t.value = r.text;
+      t.oninput = () => { FX.dirty = true; $('#fm-dirty').classList.remove('hide'); };
+      t.onkeydown = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save(false); } };
+    } else if (r.binary && /\.(png|jpe?g|gif|webp|svg|ico)$/i.test(p)) {
+      $('#fm-body').innerHTML = `<div class="empty"><img id="fm-img" alt="" style="max-width:100%;max-height:330px;border-radius:12px"><p class="dim">${kb(r.size)}</p></div>`;
+      apiBlob(`/workers/${w.id}/raw?path=${encodeURIComponent(p)}`).then((b) => { const i = $('#fm-img'); if (i) i.src = URL.createObjectURL(b); }).catch(() => {});
+    } else $('#fm-body').innerHTML = `<div class="empty">${r.binary ? 'বাইনারি ফাইল' : 'ফাইল অনেক বড় (১MB+)'} · ${kb(r.size)}</div>`;
+    hdr(); paint();
+  };
+  const save = async (deploy) => {
+    const t = $('#fm-code');
+    if (t && FX.cur) { const r = await api(`/workers/${w.id}/file`, 'PUT', { path: FX.cur, content: t.value }); if (!r.ok) return toast(r.error, 'bad'); FX.dirty = false; $('#fm-dirty').classList.add('hide'); res(r.syntax ? `<div class="alert bad"><b>সিনট্যাক্স সতর্কতা</b><pre class="mono" style="white-space:pre-wrap;margin:6px 0 0;font-size:12px">${esc(r.syntax)}</pre></div>` : ''); }
+    if (deploy) await deployNow();
+    else { toast('সেভ হয়েছে', 'ok'); await load(true); }
+  };
+  const deployNow = async () => { res('<div class="mut">ডিপ্লয় চলছে...</div>'); const r = await api(`/workers/${w.id}/deploy`, 'POST'); res(r.ok ? `<div class="alert ok">${ic('check')} ডিপ্লয় সফল${(r.warnings || []).map((x) => `<div class="dim" style="margin-top:4px">${ic('warn')} ${esc(x)}</div>`).join('')}</div>` : `<div class="alert bad"><b>ডিপ্লয় ব্যর্থ${r.rolledBack ? ' (শেষ ভালো ভার্সন ফেরত আনা হয়েছে)' : ''}</b><pre class="mono" style="white-space:pre-wrap;margin:6px 0 0;font-size:12px">${esc(r.error)}</pre></div>`); if (r.ok) toast('ডিপ্লয় সফল', 'ok'); await load(true); refresh(); };
+  const uploadList = async (list) => {
+    if (!list.length) return;
+    if (list.length === 1 && /\.zip$/i.test(list[0].path)) { const r = await fetch(`/api/workers/${w.id}/import-zip`, { method: 'POST', body: await list[0].file.arrayBuffer(), credentials: 'same-origin', headers: localToken() }).then((x) => x.json()); r.ok ? toast(`ZIP: ${r.written}টি ফাইল`, 'ok') : toast(r.error, 'bad'); return load(); }
+    const queue = list.slice(); let ok = 0, bad = 0, done = 0; const total = queue.length;
+    const one = async () => { while (queue.length) { const j = queue.shift(); $('#fm-res').innerHTML = `<div class="mut">আপলোড ${++done}/${total}: ${esc(j.path)}</div>`; const r = await fetch(`/api/workers/${w.id}/blob?path=${encodeURIComponent(j.path)}`, { method: 'PUT', body: await j.file.arrayBuffer(), credentials: 'same-origin', headers: localToken() }).then((x) => x.json()).catch(() => ({ ok: false })); if (r.ok) ok++; else { bad++; toast(`${j.path}: ${r.error || 'ব্যর্থ'}`, 'bad'); } } };
+    await Promise.all([one(), one(), one()]);
+    res(`<div class="alert ${bad ? 'warn' : 'ok'}">${ok}টি ফাইল আপলোড${bad ? `, ${bad}টি ব্যর্থ` : ''}</div>`); await load();
+  };
+  list.onclick = (e) => {
+    const d = e.target.closest('[data-dir]'); if (d) { const p = d.dataset.dir; FX.open.has(p) ? FX.open.delete(p) : FX.open.add(p); return paint(); }
+    const f = e.target.closest('[data-file]'); if (f) openFile(f.dataset.file);
+  };
+  $('#fm-up').onclick = () => $('#fm-in').click();
+  $('#fm-in').onchange = (e) => { uploadList([...e.target.files].map((f) => ({ file: f, path: f.webkitRelativePath || f.name }))); e.target.value = ''; };
+  const drop = list.parentElement;
+  ['dragover', 'dragenter'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.style.outline = '2px dashed var(--a2)'; }));
+  ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.style.outline = ''; }));
+  drop.addEventListener('drop', (e) => uploadList([...e.dataTransfer.files].map((f) => ({ file: f, path: f.name }))));
+  $('#fm-new').onclick = () => { const p = prompt('নতুন ফাইলের পাথ (যেমন lib/helpers.js)', 'lib/new.js'); if (!p) return; api(`/workers/${w.id}/file`, 'PUT', { path: p, content: '' }).then(async (r) => { if (!r.ok) return toast(r.error, 'bad'); await load(true); openFile(p); }); };
+  $('#fm-save').onclick = () => save(false); $('#fm-dep').onclick = () => save(true);
+  $('#fm-del').onclick = () => confirmBox(`"${FX.cur}" মুছবেন?`, async () => { const r = await api(`/workers/${w.id}/file?path=${encodeURIComponent(FX.cur)}`, 'DELETE'); if (!r.ok) return toast(r.error, 'bad'); FX.cur = null; $('#fm-body').innerHTML = '<div class="empty">ফাইল বাছুন</div>'; hdr(); load(true); });
+  $('#fm-entry').onclick = async () => { const r = await api(`/workers/${w.id}`, 'PATCH', { entry: FX.cur }); r.ok ? toast('এন্ট্রি ফাইল সেট হয়েছে', 'ok') : toast(r.error, 'bad'); load(true); hdr(); };
+  $('#fm-chk').onclick = async () => { const r = await api(`/workers/${w.id}/check`); if (!r.ok) return toast(r.error, 'bad'); res(`<div class="alert ${r.ok ? 'ok' : 'bad'}"><b>${r.ok ? 'ডিপ্লয়ের জন্য প্রস্তুত' : 'ডিপ্লয় আটকে যাবে'}</b> · ${r.files} ফাইল${r.errors.map((x) => `<div style="margin-top:6px;color:var(--bad)">${ic('x')} ${esc(x)}</div>`).join('')}${r.warnings.map((x) => `<div style="margin-top:6px;color:var(--warn)">${ic('warn')} ${esc(x)}</div>`).join('')}</div>`); };
+  $('#fm-test').onclick = async () => { res('<div class="mut">টেস্ট চলছে...</div>'); const r = await api(`/workers/${w.id}/tests/run`, 'POST'); if (!r.total) return res(`<div class="alert ok">${esc(r.note || 'কোনো টেস্ট নেই। tests.json যোগ করুন।')}</div>`); res(`<div class="alert ${r.ok ? 'ok' : 'bad'}"><b>${r.ok ? 'সব টেস্ট পাস' : `${r.failed}/${r.total} ব্যর্থ`}</b>${r.results.map((x) => `<div style="margin-top:6px;${x.pass ? '' : 'color:var(--bad)'}">${x.pass ? ic('check') : ic('x')} ${esc(x.name)} <span class="dim">${x.status ? x.status + ' · ' + x.ms + 'ms' : ''}</span>${x.pass ? '' : `<div class="dim">${esc(x.reason)}</div>`}</div>`).join('')}</div>`); };
+  $('#fm-rev').onclick = async () => { res('<div class="mut">AI রিভিউ চলছে...</div>'); const r = await api(`/workers/${w.id}/review`, 'POST'); res(r.ok ? `<div class="alert ok"><b>AI রিভিউ</b><pre class="mono" style="white-space:pre-wrap;margin:6px 0 0;font-size:12px">${esc(r.reply)}</pre></div>` : `<div class="alert bad">${esc(r.error)}</div>`); };
+  $('#fm-exp').onclick = async () => { try { saveBlob(await apiBlob(`/workers/${w.id}/export`), w.slug + '.zip'); } catch (e) { toast(e.message, 'bad'); } };
+  FX.cur = null; FX.dirty = false; await load();
+  const first = FX.files.find((f) => f.path === FX.entry) || FX.files[0]; if (first) openFile(first.path);
+}
+/* ENV */
+async function wEnv(w, el) {
+  const r = await api(`/workers/${w.id}/env`);
+  const rows = (r.env || []).map((e, i) => envRow(e, i)).join('');
+  el.innerHTML = `<div class="g p"><div class="row wrap" style="margin-bottom:10px"><div class="h3" style="margin:0;flex:1">Environment Variables</div><button class="btn sm" id="env-add">${ic('plus')}যোগ</button><button class="btn pri sm" id="env-save">${ic('check')}সেভ ও রিস্টার্ট</button></div>
+  <div id="envs">${rows || '<div class="dim" id="env-empty">কোনো ভেরিয়েবল নেই</div>'}</div>
+  <div class="dim" style="margin-top:10px">কোডে <span class="mono">env.KEY</span> বা <span class="mono">process.env.KEY</span>। "গোপন" দিলে মান আর দেখা যায় না।</div></div>`;
+  const box = $('#envs');
+  $('#env-add').onclick = () => { const em = $('#env-empty'); if (em) em.remove(); box.insertAdjacentHTML('beforeend', envRow({})); };
+  box.onclick = (e) => { const d = e.target.closest('[data-del]'); if (d) d.closest('.erow').remove(); };
+  box.onchange = (e) => { if (e.target.matches('[data-s]')) e.target.closest('.erow').querySelector('[data-v]').type = e.target.checked ? 'password' : 'text'; };
+  $('#env-save').onclick = async () => { const env = [...box.querySelectorAll('.erow')].map((x) => ({ key: x.querySelector('[data-k]').value.trim(), value: x.querySelector('[data-v]').value, secret: x.querySelector('[data-s]').checked })).filter((x) => x.key); const x = await api(`/workers/${w.id}/env`, 'PUT', { env }); x.ok ? toast('ENV সেভ হয়েছে', 'ok') : toast(x.error, 'bad'); wEnv(w, el); };
+}
+function envRow(x) { return `<div class="erow row wrap" style="margin-bottom:8px;gap:8px"><input class="in" data-k placeholder="KEY" value="${esc(x.key || '')}" style="flex:1;min-width:120px" autocapitalize="off"><input class="in" data-v type="${x.secret ? 'password' : 'text'}" placeholder="${x.secret ? '•••• (সেভ আছে)' : 'মান'}" value="${x.secret ? '' : esc(x.value || '')}" style="flex:2;min-width:160px"><label class="row" style="margin:0;gap:5px;font-size:12px"><input type="checkbox" data-s ${x.secret ? 'checked' : ''}>গোপন</label><button class="btn bad sm" data-del>${ic('x')}</button></div>`; }
+/* ভার্সন */
+async function wVersions(w, el) {
+  const r = await api(`/workers/${w.id}/versions`); if (!r.ok) return;
+  const L = { ok: ['সফল', 'var(--ok)'], failed: ['ব্যর্থ', 'var(--bad)'], manual: ['ম্যানুয়াল', 'var(--a2)'] };
+  el.innerHTML = `<div class="g p"><div class="row wrap" style="margin-bottom:10px"><div class="h3" style="margin:0;flex:1">ডিপ্লয় ইতিহাস</div><button class="btn sm" id="vs">${ic('plus')}এখনকার ভার্সন সেভ</button></div>
+  ${r.versions.length ? r.versions.map((v) => `<div class="row" style="padding:11px 0;border-bottom:1px solid var(--line);gap:10px;flex-wrap:wrap"><span class="pill" style="color:${L[v.label][1]}">${L[v.label][0]}</span><div style="flex:1;min-width:180px"><b>${new Date(v.ts).toLocaleString()}</b><div class="dim">${v.files} ফাইল · ${kb(v.size)}</div></div><button class="btn sm" data-df="${esc(v.name)}">${ic('edit')}তুলনা</button><button class="btn sm" data-rv="${esc(v.name)}">${ic('undo')}ফিরুন</button></div>`).join('') : '<div class="mut">এখনো কোনো ভার্সন নেই। সফল ডিপ্লয়ে নিজে থেকেই তৈরি হয়।</div>'}
+  <div class="dim" style="margin-top:10px">"ব্যর্থ" ভার্সনে ডিপ্লয় ব্যর্থ হওয়ার সময়কার ফাইল থাকে।</div></div>`;
+  $('#vs').onclick = async () => { await api(`/workers/${w.id}/snapshot`, 'POST'); toast('ভার্সন সেভ হয়েছে', 'ok'); wVersions(w, el); };
+  el.querySelectorAll('[data-rv]').forEach((b) => (b.onclick = () => confirmBox('এই ভার্সনে ফিরে ডিপ্লয় হবে। বর্তমান ফাইল বদলাবে।', async () => { const x = await api(`/workers/${w.id}/restore`, 'POST', { name: b.dataset.rv }); x.ok ? toast('ভার্সন ফেরত এসেছে', 'ok') : toast(x.error, 'bad'); wVersions(w, el); })));
+  el.querySelectorAll('[data-df]').forEach((b) => (b.onclick = () => showDiff(w, b.dataset.df)));
+}
+async function showDiff(w, name, file) {
+  const r = await api(`/workers/${w.id}/versions/${encodeURIComponent(name)}/diff${file ? '?file=' + encodeURIComponent(file) : ''}`); if (!r.ok) return toast(r.error, 'bad');
+  const ST = { added: ['নতুন', 'var(--ok)'], removed: ['বাদ', 'var(--bad)'], changed: ['বদল', 'var(--warn)'] };
+  const list = r.files.length ? r.files.map((f) => `<div class="fr ${r.file === f.path ? 'on' : ''}" data-df-file="${esc(f.path)}"><span class="pill" style="color:${ST[f.status][1]}">${ST[f.status][0]}</span><span class="fn mono">${esc(f.path)}</span><small>${f.binary ? 'বাইনারি' : `+${f.add} −${f.del}`}</small></div>`).join('') : '<div class="mut">কোনো পার্থক্য নেই</div>';
+  const lines = r.file ? ((r.files.find((f) => f.path === r.file) || {}).lines || []) : [];
+  const body = lines.length ? `<pre class="term" style="height:auto;max-height:340px;white-space:pre;font-size:12px">${lines.map((l) => `<div style="color:${l.t === '+' ? 'var(--ok)' : l.t === '-' ? 'var(--bad)' : 'var(--t3)'}">${esc(l.t)} ${esc(l.s)}</div>`).join('')}</pre>` : '<div class="dim">একটি ফাইল বাছুন</div>';
+  const o = modal(`<div class="row" style="margin-bottom:8px"><h3 style="margin:0;flex:1">ভার্সন তুলনা</h3><button class="btn sm" data-x>${ic('x')}</button></div><div class="dim" style="margin-bottom:10px">ভার্সন → বর্তমান (+ নতুন, − বাদ) · ${new Date(r.ts).toLocaleString()}</div><div class="scr" style="max-height:200px;overflow:auto">${list}</div><div style="margin-top:12px">${body}</div>`, true);
+  o.querySelector('[data-x]').onclick = () => o.remove();
+  o.querySelectorAll('[data-df-file]').forEach((el) => (el.onclick = () => { o.remove(); showDiff(w, name, el.dataset.dfFile); }));
+}
+/* ডাটাবেস */
+async function wDb(w, el) {
+  el.innerHTML = `<div class="grid c2"><div class="g p"><div class="h3">টেবিল</div><div id="db-t">লোড হচ্ছে...</div></div><div class="g p"><div class="row wrap" style="margin-bottom:8px"><div class="h3" style="margin:0;flex:1" id="db-title">ডাটা</div><button class="btn sm" id="db-more">আরও</button></div><div class="scr" id="db-rows" style="overflow:auto;max-height:330px">একটি টেবিল বাছুন</div></div></div>
+  <div class="g p" style="margin-top:14px"><div class="h3">SELECT কোয়েরি</div><textarea class="in" id="db-sql" style="min-height:70px" placeholder="SELECT * FROM notes ORDER BY id DESC"></textarea><div class="row" style="margin-top:8px"><button class="btn pri sm" id="db-run">${ic('play')}চালাও</button><span class="dim">শুধু SELECT। লেখা বা একাধিক স্টেটমেন্ট বন্ধ।</span></div><div id="db-q" style="margin-top:10px;overflow:auto;max-height:280px"></div></div>`;
+  const grid = (cols, rows) => (rows.length ? `<table class="tbl"><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr>${rows.map((r) => `<tr>${cols.map((c) => `<td class="mono" style="max-width:240px;overflow:hidden;text-overflow:ellipsis">${esc(r[c] == null ? 'NULL' : String(r[c]))}</td>`).join('')}</tr>`).join('')}</table>` : '<div class="mut">কোনো সারি নেই</div>');
+  let cur = null, off = 0;
+  const showRows = async (t, reset) => { cur = t; if (reset) off = 0; const r = await api(`/workers/${w.id}/db/rows?table=${encodeURIComponent(t)}&limit=50&offset=${off}`); if (!r.ok) return toast(r.error, 'bad'); $('#db-title').textContent = `${t} (${r.total})`; $('#db-rows').innerHTML = grid(r.columns, r.rows); $('#db-more').disabled = r.rows.length < 50; };
+  const t = await api(`/workers/${w.id}/db`); if (!t.ok) return toast(t.error, 'bad');
+  $('#db-t').innerHTML = !t.exists ? '<div class="mut">এখনো ডাটাবেস নেই (Worker env.DB ব্যবহার করলে তৈরি হয়)</div>' : (t.tables.length ? t.tables.map((x) => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer" data-tb="${esc(x.name)}"><span class="mono" style="flex:1">${esc(x.name)}</span><span class="pill">${x.rows}</span></div>`).join('') : '<div class="mut">কোনো টেবিল নেই</div>');
+  el.querySelectorAll('[data-tb]').forEach((row) => (row.onclick = () => showRows(row.dataset.tb, true)));
+  $('#db-more').onclick = () => { off += 50; showRows(cur, false); };
+  $('#db-run').onclick = async () => { const r = await api(`/workers/${w.id}/db/query`, 'POST', { sql: $('#db-sql').value }); $('#db-q').innerHTML = r.ok ? `<div class="dim" style="margin-bottom:6px">${r.total} সারি</div>` + grid(r.columns, r.rows) : `<div style="color:var(--bad)">${esc(r.error)}</div>`; };
+}
+/* AI */
+function histLoad(k) { try { return JSON.parse(localStorage.getItem(k) || '[]').filter((m) => m && m.role && typeof m.text === 'string'); } catch { return []; } }
+function histSave(k, log) { try { localStorage.setItem(k, JSON.stringify(log.filter((m) => !m.typing && m.text).slice(-30).map((m) => ({ role: m.role, text: String(m.text).slice(0, 2000) })))); } catch { /* ignore */ } }
+async function wAi(w, el) {
+  if (!S.ai.ready) { el.innerHTML = `<div class="g empty">${ic('spark')}<p>AI চালু করতে সেটিংসে Mistral API key দিন</p><button class="btn pri" data-go="settings">সেটিংসে যান</button></div>`; el.querySelector('[data-go]').onclick = () => go('settings'); return; }
+  const key = 'mch-wai-' + w.id; const log = histLoad(key);
+  el.innerHTML = `<div class="g p"><div class="row wrap" style="margin-bottom:10px"><span class="pill">${ic('spark')}${esc(S.ai.model)}</span><span class="dim" style="flex:1">চ্যাটের ইতিহাস এই ব্রাউজারে থাকে, সার্ভারে নয়</span><button class="btn sm" id="ai-clr">${ic('trash')}মুছুন</button></div>
+  <div class="chat" id="ai-chat"></div>
+  <div class="row wrap" style="margin:10px 0">${['ত্রুটি ও লগ বিশ্লেষণ করো', 'কোড উন্নত করো (নিরাপত্তা ও ত্রুটি হ্যান্ডলিং)', '/health এন্ডপয়েন্ট যোগ করো', 'কোডকে কয়েকটি ফাইলে ভাগ করো'].map((q) => `<button class="btn sm" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+  <div class="row"><textarea class="in" id="ai-in" rows="2" style="min-height:0;font-family:var(--font);font-size:14px" placeholder="কী করতে চান লিখুন..."></textarea><button class="btn pri" id="ai-send">${ic('send')}</button></div></div>`;
+  const paint = () => {
+    const c = $('#ai-chat');
+    c.innerHTML = log.length ? log.map((m, i) => `<div class="msg ${m.role === 'user' ? 'u' : 'a'}">${m.typing ? '<span class="dim">ভাবছে...</span>' : esc(m.text)}${m.changes && m.changes.length ? changesHtml(m, i) : ''}</div>`).join('') : `<div class="empty">${ic('spark')}<p>Worker-এর ফাইল, লগ ও ত্রুটি দেখে সাহায্য করে। ENV-এর মান কখনো পাঠানো হয় না।</p></div>`;
+    c.scrollTop = c.scrollHeight;
+    c.querySelectorAll('[data-apply]').forEach((b) => (b.onclick = async () => { const m = log[Number(b.dataset.apply)]; const paths = [...b.closest('.msg').querySelectorAll('[data-pp]:checked')].map((x) => x.dataset.pp); if (!paths.length) return toast('কোনো ফাইল বাছা হয়নি', 'bad'); b.disabled = true; const r = await api(`/workers/${w.id}/ai/apply`, 'POST', { paths }); if (r.ok) { toast(`${r.applied}টি ফাইল প্রয়োগ ও ডিপ্লয়`, 'ok'); m.changes = []; m.text += '\n\n(প্রয়োগ হয়েছে)'; } else { toast(r.error, 'bad'); m.text += `\n\n(ব্যর্থ${r.rolledBack ? ', আগের ভার্সন ফেরত' : ''}: ${String(r.error).split('\n')[0]})`; m.changes = []; } histSave(key, log); paint(); refresh(); }));
+  };
+  const send = async (text) => {
+    if (busy || !text.trim()) return; busy = true;
+    const hist = log.filter((m) => !m.typing && m.text).slice(-12).map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text.slice(0, 1500) }));
+    log.push({ role: 'user', text }); log.push({ role: 'ai', typing: true, text: '' }); paint();
+    const r = await api(`/workers/${w.id}/ai`, 'POST', { text, history: hist }); log.pop();
+    log.push(r.ok ? { role: 'ai', text: r.reply, changes: r.changes } : { role: 'ai', text: 'ত্রুটি: ' + r.error });
+    histSave(key, log); busy = false; paint();
+  };
+  $('#ai-send').onclick = () => { const i = $('#ai-in'); const t = i.value; i.value = ''; send(t); };
+  $('#ai-in').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#ai-send').click(); } };
+  el.querySelectorAll('[data-q]').forEach((b) => (b.onclick = () => send(b.dataset.q)));
+  $('#ai-clr').onclick = () => { try { localStorage.removeItem(key); } catch { /* ignore */ } log.length = 0; paint(); toast('মুছে ফেলা হয়েছে', 'ok'); };
+  paint();
+}
+function changesHtml(m, i) {
+  return `<div class="col" style="gap:8px;margin-top:10px">${m.changes.map((c) => `<div class="ins" style="--c:${c.error ? 'var(--bad)' : 'var(--a2)'}"><label class="row" style="margin:0;gap:8px;flex:1"><input type="checkbox" data-pp="${esc(c.path)}" ${c.error ? 'disabled' : 'checked'}><span class="mono" style="flex:1">${esc(c.path)}</span><span class="pill">${c.isNew ? 'নতুন' : 'বদল'}</span>${c.error ? `<span class="dim" style="color:var(--bad)">${esc(String(c.error).split('\n')[0])}</span>` : ''}</label></div>`).join('')}${m.changes.some((c) => !c.error) ? `<div class="row"><button class="btn ok sm" data-apply="${i}">${ic('check')}নির্বাচিত প্রয়োগ ও ডিপ্লয়</button></div>` : ''}</div>`;
+}
+/* লগ */
+async function wLogs(w, el) {
+  el.innerHTML = `<div class="g p"><div class="row" style="margin-bottom:10px"><div class="h3" style="margin:0;flex:1">console লগ</div><button class="btn sm" id="lg-r">${ic('redo')}রিফ্রেশ</button></div><div class="term" id="lg-t">লোড হচ্ছে...</div></div>`;
+  const load = async () => { if (!$('#lg-t')) return clearInterval(window._lgT); const r = await api(`/workers/${w.id}/logs`); const t = $('#lg-t'); if (!t || !r.ok) return; const down = t.scrollTop + t.clientHeight >= t.scrollHeight - 30; t.innerHTML = r.logs.map((l) => `<div style="color:${l.includes(' ! ') ? 'var(--bad)' : ''}">${esc(l)}</div>`).join('') || '(কোনো লগ নেই। console.log() লিখলে এখানে আসবে)'; if (down) t.scrollTop = t.scrollHeight; };
+  load(); $('#lg-r').onclick = load; clearInterval(window._lgT); window._lgT = setInterval(load, 2500);
+}
+/* টেস্ট */
+function savedTests() { try { return JSON.parse(localStorage.getItem('mch-wtests') || '[]'); } catch { return []; } }
+function wTest(w, el) {
+  el.innerHTML = `<div class="grid c2"><div class="g p"><div class="h3">রিকোয়েস্ট</div><div class="col"><div class="row"><select class="in" id="t-m" style="width:120px">${['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].map((m) => `<option>${m}</option>`).join('')}</select><input class="in" id="t-p" value="/" placeholder="/path?x=1"></div><div><label>Headers (প্রতি লাইনে Key: value)</label><textarea class="in" id="t-h" style="min-height:60px"></textarea></div><div><label>Body</label><textarea class="in" id="t-b" style="min-height:90px"></textarea></div><div class="row wrap"><button class="btn pri" id="t-s">${ic('send')}পাঠান</button><button class="btn sm" id="t-save">${ic('check')}সেভ</button><select class="in" id="t-saved" style="max-width:240px"></select></div></div></div><div class="g p"><div class="h3">উত্তর</div><div id="t-o" class="mut">এখনো পাঠানো হয়নি</div></div></div>`;
+  const fill = () => { $('#t-saved').innerHTML = '<option value="">সেভ করা রিকোয়েস্ট...</option>' + savedTests().map((x, i) => `<option value="${i}">${esc(x.m)} ${esc(x.p)}</option>`).join(''); }; fill();
+  $('#t-saved').onchange = (e) => { const x = savedTests()[Number(e.target.value)]; if (!x) return; $('#t-m').value = x.m; $('#t-p').value = x.p; $('#t-h').value = x.h; $('#t-b').value = x.b; };
+  $('#t-save').onclick = () => { const l = savedTests(); l.unshift({ m: $('#t-m').value, p: $('#t-p').value, h: $('#t-h').value, b: $('#t-b').value }); try { localStorage.setItem('mch-wtests', JSON.stringify(l.slice(0, 15))); } catch { /* ignore */ } fill(); toast('সেভ হয়েছে', 'ok'); };
+  $('#t-s').onclick = async () => {
+    const m = $('#t-m').value; let p = $('#t-p').value.trim() || '/'; if (!p.startsWith('/')) p = '/' + p;
+    const headers = {}; $('#t-h').value.split('\n').forEach((l) => { const i = l.indexOf(':'); if (i > 0) headers[l.slice(0, i).trim()] = l.slice(i + 1).trim(); });
+    const t0 = performance.now();
+    try {
+      const r = await fetch('/w/' + w.slug + p, { method: m, headers, body: ['GET', 'HEAD', 'OPTIONS'].includes(m) ? undefined : $('#t-b').value, credentials: 'omit' });
+      const txt = await r.text(), ms = Math.round(performance.now() - t0); let body = txt.slice(0, 20000); try { body = JSON.stringify(JSON.parse(txt), null, 2); } catch { /* text */ }
+      const hd = [...r.headers].map(([k, v]) => `${k}: ${v}`).join('\n');
+      $('#t-o').innerHTML = `<div class="row wrap" style="margin-bottom:10px"><span class="pill" style="color:${r.status < 400 ? 'var(--ok)' : r.status < 500 ? 'var(--warn)' : 'var(--bad)'}">${r.status}</span><span class="pill">${ms} ms</span><span class="pill">${kb(txt.length)}</span></div><div class="h3">Headers</div><pre class="term" style="height:auto;max-height:130px">${esc(hd)}</pre><div class="h3" style="margin-top:10px">Body</div><pre class="term" style="height:auto;max-height:300px">${esc(body)}</pre>`;
+    } catch (e) { $('#t-o').innerHTML = `<div style="color:var(--bad)">${esc(e.message)}</div>`; }
+  };
+}
+/* সেটিংস (Worker) */
+function wSettings(w, el) {
+  el.innerHTML = `<div class="grid c2"><div class="g p"><div class="h3">সাধারণ</div><div class="col">
+    <div><label>নাম</label><input class="in" id="s-n" value="${esc(w.name)}"></div>
+    <div><label>URL নাম (/w/...)</label><input class="in" id="s-s" value="${esc(w.slug)}"></div>
+    <div><label>কাস্টম ডোমেইন (ঐচ্ছিক, DNS আপনার হোস্টের দিকে হতে হবে)</label><input class="in" id="s-d" value="${esc(w.domain || '')}" placeholder="api.example.com"></div>
+    <div class="grid c2" style="gap:10px"><div><label>Cron মিনিট (0=বন্ধ, চালু থাকলে ঘুমাবে না)</label><input class="in" id="s-c" type="number" min="0" max="1440" value="${w.cronMin}"></div><div><label>Rate limit (প্রতি IP/মিনিট, 0 = সীমাহীন)</label><input class="in" id="s-r" type="number" min="0" value="${w.rateLimit || 0}"></div></div>
+    <div><label>এন্ট্রি ফাইল</label><input class="in" id="s-e" value="${esc(w.entry)}"></div>
+    <button class="btn pri" id="s-save" style="align-self:flex-start">${ic('check')}সেভ</button></div></div>
+  <div class="g p"><div class="h3">রিসোর্স ও সুরক্ষা</div><div class="col">
+    <div class="grid c2" style="gap:10px"><div><label>RAM সীমা (MB, 0 = সীমাহীন)</label><input class="in" id="s-m" type="number" min="0" value="${w.memoryMb || 0}"></div><div><label>নিষ্ক্রিয় হলে ঘুম (সেকেন্ড, 0 = সব সময় চালু)</label><input class="in" id="s-i" type="number" min="0" value="${Math.round((w.idleMin || 0) * 60)}"></div></div>
+    <div class="grid c2" style="gap:10px"><div><label>দৈনিক রিকোয়েস্ট সীমা (0 = সীমাহীন)</label><input class="in" id="s-dl" type="number" min="0" value="${w.dailyLimit || 0}"></div><div><label>একসাথে সর্বোচ্চ অনুরোধ (0 = সীমাহীন)</label><input class="in" id="s-cc" type="number" min="0" value="${w.concurrency || 0}"></div></div>
+    <div class="grid c2" style="gap:10px"><div><label>বাজেট: সর্বোচ্চ p95 (ms, 0=বন্ধ)</label><input class="in" id="s-bp" type="number" min="0" value="${(w.budget && w.budget.p95Ms) || 0}"></div><div><label>বাজেট: সর্বোচ্চ ত্রুটি % (0=বন্ধ)</label><input class="in" id="s-be" type="number" min="0" max="100" value="${(w.budget && w.budget.errPct) || 0}"></div></div>
+    <label class="row" style="gap:9px"><div class="sw ${w.strictTests ? 'on' : ''}" id="s-strict"></div>ডিপ্লয়ের পর tests.json চালাও, ব্যর্থ হলে আগের ভার্সনে ফিরবে</label>
+    <div class="row wrap"><button class="btn sm" id="s-unl">সব সীমা সীমাহীন করুন</button><button class="btn sm" id="s-always">সব সময় চালু রাখুন</button></div><div class="dim">RAM সীমা বদলালে Worker রিস্টার্ট হবে। সীমাহীন মানে কোনো সীমা নেই, তাই হোস্টের RAM বেশি লাগতে পারে।</div></div></div></div>
+  <div class="g p" style="margin-top:14px"><div class="h3">অ্যাকশন</div><div class="row wrap"><button class="btn sm" id="s-clone">${ic('copy')}ক্লোন</button><button class="btn sm" id="s-exp">${ic('down')}ZIP নামান</button><span class="sp"></span><button class="btn bad sm" id="s-del">${ic('trash')}মুছুন</button></div></div>`;
+  $('#s-unl').onclick = () => { $('#s-m').value = 0; $('#s-cc').value = 0; $('#s-dl').value = 0; $('#s-c').value = $('#s-c').value; toast('সীমা শূন্য করা হয়েছে (সেভ করুন)', 'ok'); };
+  $('#s-always').onclick = () => { $('#s-i').value = 0; toast('সব সময় চালু (সেভ করুন)', 'ok'); };
+  let strict = !!w.strictTests; $('#s-strict').onclick = (e) => { strict = !strict; e.currentTarget.classList.toggle('on', strict); };
+  $('#s-save').onclick = async () => {
+    const body = { name: $('#s-n').value.trim(), slug: $('#s-s').value.trim(), domain: $('#s-d').value.trim(), cronMin: $('#s-c').value, rateLimit: $('#s-r').value, entry: $('#s-e').value.trim(), concurrency: $('#s-cc').value, memoryMb: $('#s-m').value, idleMin: (Number($('#s-i').value) || 0) / 60, dailyLimit: $('#s-dl').value, strictTests: strict, budget: { p95Ms: $('#s-bp').value, errPct: $('#s-be').value } };
+    const r = await api(`/workers/${w.id}`, 'PATCH', body); r.ok ? toast('সেভ হয়েছে', 'ok') : toast(r.error, 'bad'); refresh(); if (r.ok && body.slug !== w.slug) go('w/' + w.id + '/settings');
+  };
+  $('#s-clone').onclick = async () => { const r = await api(`/workers/${w.id}/clone`, 'POST', { name: w.name + ' copy' }); if (!r.ok) return toast(r.error, 'bad'); toast('ক্লোন তৈরি (বন্ধ অবস্থায়)', 'ok'); refresh(); go('w/' + r.id); };
+  $('#s-exp').onclick = async () => { try { saveBlob(await apiBlob(`/workers/${w.id}/export`), w.slug + '.zip'); } catch (e) { toast(e.message, 'bad'); } };
+  $('#s-del').onclick = () => confirmBox(`"${w.name}", তার সব ফাইল, ভার্সন ও ডাটাবেস মুছে যাবে।`, async () => { await api(`/workers/${w.id}`, 'DELETE'); toast('মুছে ফেলা হয়েছে', 'ok'); go('workers'); refresh(); });
+}
+
+/* ---------- AI Gateway ---------- */
+let GW_PRESETS = [];
+const GW_LABEL = { ok: 'সক্রিয়', cooldown: 'বিরতিতে', nocredit: 'ক্রেডিট শেষ', invalid: 'key ভুল', error: 'ত্রুটি', untested: 'যাচাই হয়নি' };
+const GW_CLS = { ok: 'running', cooldown: 'starting', nocredit: 'error', invalid: 'error', error: 'error', untested: 'stopped' };
+const gwPill = (st) => `<span class="pill st-${GW_CLS[st] || 'stopped'}"><span class="dot"></span>${GW_LABEL[st] || st}</span>`;
+async function renderGateway(onlyLive) {
+  const gw = S && S.gateway; if (!gw) return;
+  if (onlyLive && $('#gw-root')) { paintGwLive(); return; }
+  if (!GW_PRESETS.length) { const r = await api('/gateway'); if (r.ok) GW_PRESETS = r.presets || []; }
+  const ep = location.origin + '/v1';
+  const nextName = (gw.providers.find((p) => p.id === gw.nextId) || {}).name || '';
+  $('#view').innerHTML = `<div id="gw-root" class="col" style="gap:14px">
+  <div class="g p" style="background:linear-gradient(135deg,color-mix(in srgb,var(--a1) 20%,transparent),transparent),var(--glass)">
+    <div class="h3">আপনার OpenAI-সামঞ্জস্যপূর্ণ endpoint</div>
+    <div class="grid c2" style="gap:12px">
+      <div><label>Base URL</label><div class="row"><input class="in mono" id="gw-ep" value="${esc(ep)}" readonly><button class="btn sm" id="gw-cpep">${ic('copy')}</button></div></div>
+      <div><label>Model নাম (অ্যাপে এটিই লিখবেন)</label><div class="row"><input class="in mono" id="gw-model" value="${esc(gw.model)}"><button class="btn sm" id="gw-msave">${ic('check')}</button></div></div>
+      <div><label>API key</label><div class="row"><input class="in mono" value="${esc(gw.key || 'নেই')}" readonly><button class="btn sm" id="gw-rot">${ic('redo')}নতুন key</button></div><div class="dim">পুরো key শুধু নতুন তৈরির সময় একবার দেখানো হয়। ভুলে গেলে নতুন key বানান।</div></div>
+      <div><label>পরবর্তী পালা</label><div class="pill" id="gw-next">${gw.next ? '#' + gw.next + ' ' + esc(nextName) : 'কোনো সক্রিয় provider নেই'}</div><div class="dim" id="gw-act">সক্রিয়: ${gw.activeCount}/${gw.total}। ১ → N → ১ ক্রমে ঘোরে; ব্যর্থ হলে পরেরটায় যায়।</div></div>
+    </div>
+    <pre class="term" style="height:auto;margin-top:12px;font-size:12px;white-space:pre-wrap">curl ${esc(ep)}/chat/completions -H "Authorization: Bearer ${esc(gw.key || 'mcgw_...')}" -H "Content-Type: application/json" -d '{"model":"${esc(gw.model)}","messages":[{"role":"user","content":"হ্যালো"}]}'</pre>
+  </div>
+  <div class="g p"><div class="row wrap" style="margin-bottom:10px"><div class="h3" style="margin:0;flex:1">নতুন provider যোগ করুন</div><button class="btn sm" id="gw-all">${ic('bolt')}সব পরীক্ষা</button></div>
+    <div class="grid c2" style="gap:10px">
+      <div><label>ধরন</label><select class="in" id="gw-pre">${GW_PRESETS.map((p) => `<option value="${p.key}" data-url="${esc(p.baseUrl)}">${esc(p.name)}</option>`).join('')}</select></div>
+      <div><label>নাম (ঐচ্ছিক)</label><input class="in" id="gw-name" placeholder="যেমন: Account 3"></div>
+      <div style="grid-column:1/-1"><label>Base URL</label><input class="in mono" id="gw-url" value="${esc((GW_PRESETS[0] || {}).baseUrl || '')}"></div>
+      <div style="grid-column:1/-1"><label>API key</label><input class="in mono" id="gw-key" type="password" autocomplete="off" placeholder="provider-এর key"></div>
+    </div>
+    <div class="row wrap" style="margin-top:10px"><button class="btn pri sm" id="gw-add">${ic('plus')}যোগ ও পরীক্ষা</button><span class="dim">যোগ হলে নিজেই পরীক্ষা হয়। সফল হলে সাথে সাথে ঘূর্ণনে যোগ হয়।</span></div>
+  </div>
+  <div id="gw-list"></div>
+  <div class="g p"><div class="h3">লাইভ ইতিহাস</div><div id="gw-hist"></div></div>
+  <div class="g p"><div class="h3">গেটওয়ে পরীক্ষা</div><div class="row"><input class="in" id="gw-q" placeholder="একটি প্রশ্ন লিখুন..."><button class="btn pri sm" id="gw-go">${ic('send')}</button></div><div id="gw-ans" style="margin-top:10px;white-space:pre-wrap"></div></div>
+  </div>`;
+  bindGateway(); paintGwLive();
+}
+function gwCard(p) {
+  const opts = (p.models || []).slice(0, 300).map((m) => `<option ${m === p.model ? 'selected' : ''}>${esc(m)}</option>`).join('') || `<option>${esc(p.model || 'মডেল নেই')}</option>`;
+  return `<div class="g p" style="${p.isNext ? 'border-color:var(--a2)' : ''}">
+    <div class="row"><span class="pill mono">#${p.no}</span><b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</b>${gwPill(p.status)}</div>
+    <div class="dim mono" style="margin-top:6px;overflow:hidden;text-overflow:ellipsis">${esc(p.baseUrl)} · ${esc(p.keyMask)}</div>
+    <div class="row wrap" style="margin-top:10px;gap:6px"><select class="in" data-gm="${p.id}" style="flex:1;min-width:160px">${opts}</select><button class="btn sm" data-gt="${p.id}">${ic('bolt')}পরীক্ষা</button><button class="btn sm" data-ge="${p.id}">${p.enabled ? 'বন্ধ' : 'চালু'}</button><button class="btn bad sm" data-gd="${p.id}">${ic('trash')}</button></div>
+    <div class="row wrap" style="margin-top:10px;gap:6px"><span class="pill">অনুরোধ ${nf(p.stats.req)}</span><span class="pill">সফল ${nf(p.stats.ok)}</span><span class="pill" style="${p.stats.fail ? 'color:var(--warn)' : ''}">ব্যর্থ ${nf(p.stats.fail)}</span>${p.latency ? `<span class="pill">${p.latency} ms</span>` : ''}${p.credits ? `<span class="pill">ক্রেডিট ${p.credits.left} / ${p.credits.total}</span>` : ''}${p.isNext ? '<span class="pill" style="color:var(--a2)">পরবর্তী</span>' : ''}</div>
+    ${p.lastError ? `<div class="alert bad" style="margin-top:8px">${esc(p.lastError)}</div>` : ''}
+    ${p.cooling ? `<div class="dim" style="margin-top:6px">বিরতি শেষ: ${new Date(p.coolUntil).toLocaleTimeString()}</div>` : ''}
+    ${!p.enabled ? '<div class="dim" style="margin-top:6px">বন্ধ আছে (ঘূর্ণনে নেই)</div>' : ''}
+  </div>`;
+}
+function paintGwLive() {
+  const gw = S && S.gateway; if (!gw) return;
+  const nx = $('#gw-next'); if (nx) nx.textContent = gw.next ? '#' + gw.next + ' ' + ((gw.providers.find((p) => p.id === gw.nextId) || {}).name || '') : 'কোনো সক্রিয় provider নেই';
+  const ac = $('#gw-act'); if (ac) ac.textContent = `সক্রিয়: ${gw.activeCount}/${gw.total}। ১ → N → ১ ক্রমে ঘোরে; ব্যর্থ হলে পরেরটায় যায়।`;
+  const list = $('#gw-list'); if (list) list.innerHTML = gw.providers.length ? `<div class="grid c2">${gw.providers.map(gwCard).join('')}</div>` : '<div class="g empty">কোনো provider নেই। উপরে যোগ করুন।</div>';
+  const hist = $('#gw-hist'); if (hist) hist.innerHTML = gw.history.length ? `<table class="tbl"><tr><th>সময়</th><th>Provider</th><th>মডেল</th><th>ফলাফল</th><th>ms</th><th>ফলব্যাক</th><th>উৎস</th></tr>${gw.history.slice(0, 60).map((x) => `<tr><td>${new Date(x.t).toLocaleTimeString()}</td><td>${esc(x.provider)} <span class="dim">#${x.pno || '-'}</span></td><td class="mono">${esc(x.model || '')}</td><td style="color:${x.ok ? 'var(--ok)' : 'var(--bad)'};white-space:normal;max-width:300px">${x.ok ? 'সফল' : esc(x.err || 'ব্যর্থ')}</td><td>${x.ms}</td><td>${x.fallbacks || 0}</td><td>${esc(x.src || '')}</td></tr>`).join('')}</table>` : '<div class="mut">এখনো কোনো অনুরোধ নেই</div>';
+}
+function bindGateway() {
+  $('#gw-cpep').onclick = () => copyText($('#gw-ep').value);
+  $('#gw-msave').onclick = async () => { const r = await api('/gateway/settings', 'PUT', { model: $('#gw-model').value.trim() }); r.ok ? toast('Model নাম সেভ', 'ok') : toast(r.error, 'bad'); refresh(); };
+  $('#gw-rot').onclick = () => confirmBox('নতুন key তৈরি হলে পুরনো key কাজ করবে না। নিশ্চিত?', async () => { const r = await api('/gateway/key/rotate', 'POST'); if (!r.ok) return toast(r.error, 'bad'); const o = modal(`<h3 style="margin:0 0 8px">নতুন Gateway key</h3><p class="mut" style="margin:0 0 10px">এটি এখনই একবার দেখানো হচ্ছে। কপি করে রাখুন।</p><pre class="term" style="height:auto;white-space:pre-wrap;word-break:break-all">${esc(r.key)}</pre><div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-cp>${ic('copy')}কপি</button><button class="btn pri" data-ok>হয়েছে</button></div>`); $('[data-cp]', o).onclick = () => copyText(r.key); $('[data-ok]', o).onclick = () => { o.remove(); refresh(); renderGateway(false); }; });
+  $('#gw-pre').onchange = (e) => { const opt = e.target.selectedOptions[0]; $('#gw-url').value = opt.dataset.url || ''; };
+  $('#gw-add').onclick = async () => {
+    const b = $('#gw-add'); b.disabled = true; toast('পরীক্ষা হচ্ছে...', 'ok');
+    const r = await api('/gateway/providers', 'POST', { preset: $('#gw-pre').value, name: $('#gw-name').value.trim(), baseUrl: $('#gw-url').value.trim(), apiKey: $('#gw-key').value.trim() });
+    b.disabled = false;
+    if (!r.ok) return toast(r.error, 'bad');
+    r.status === 'ok' ? toast('Provider যোগ হয়েছে ও সক্রিয়', 'ok') : toast('যোগ হয়েছে, কিন্তু সক্রিয় নয়: ' + (r.lastError || r.status), 'bad');
+    $('#gw-key').value = ''; $('#gw-name').value = ''; refresh(); renderGateway(false);
+  };
+  $('#gw-all').onclick = async () => { toast('সব provider পরীক্ষা হচ্ছে...', 'ok'); await api('/gateway/test-all', 'POST'); toast('পরীক্ষা শেষ', 'ok'); refresh(); };
+  $('#gw-go').onclick = async () => { const q = $('#gw-q').value.trim(); if (!q) return; $('#gw-ans').textContent = 'উত্তর আসছে...'; const r = await api('/gateway/chat', 'POST', { text: q }); $('#gw-ans').innerHTML = r.ok ? `<div class="dim" style="margin-bottom:6px">${esc(r.provider)} (#${r.providerNo}) · ${r.latency} ms · ফলব্যাক ${r.fallbacks}</div>${esc(r.text)}` : `<span style="color:var(--bad)">${esc(r.error)}</span>`; refresh(); };
+  $('#gw-q').onkeydown = (e) => { if (e.key === 'Enter') $('#gw-go').click(); };
+  const list = $('#gw-list');
+  list.onchange = async (e) => { const m = e.target.closest('[data-gm]'); if (m) { const r = await api('/gateway/providers/' + m.dataset.gm, 'PATCH', { model: m.value }); r.ok ? toast('মডেল বদলেছে', 'ok') : toast(r.error, 'bad'); refresh(); } };
+  list.onclick = async (e) => {
+    const t = e.target.closest('[data-gt]'); if (t) { t.disabled = true; const r = await api(`/gateway/providers/${t.dataset.gt}/test`, 'POST'); toast(r.status === 'ok' ? 'সফল' : 'ব্যর্থ: ' + (r.lastError || r.status), r.status === 'ok' ? 'ok' : 'bad'); refresh(); return; }
+    const en = e.target.closest('[data-ge]'); if (en) { const p = S.gateway.providers.find((x) => x.id === en.dataset.ge); await api('/gateway/providers/' + p.id, 'PATCH', { enabled: !p.enabled }); refresh(); return; }
+    const d = e.target.closest('[data-gd]'); if (d) confirmBox('এই provider মুছবে?', async () => { await api('/gateway/providers/' + d.dataset.gd, 'DELETE'); refresh(); });
+  };
+}
+
+/* ---------- সেটিংস ---------- */
+function renderSettings(onlyLive) {
+  if (onlyLive && $('#set-live')) { /* পরিবর্তন নেই */ return; }
+  $('#view').innerHTML = `<div class="col" style="gap:14px"><div id="set-live"></div>
+  <div class="grid c2">
+    <div class="g p"><div class="h3">পাসওয়ার্ড</div><div class="col"><div><label>বর্তমান পাসওয়ার্ড</label><input class="in" id="pw-c" type="password"></div><div><label>নতুন পাসওয়ার্ড (কমপক্ষে ৬)</label><input class="in" id="pw-n" type="password"></div><button class="btn sm" id="pw-go" style="align-self:flex-start">${ic('key')}বদলান</button><div class="dim">পাসওয়ার্ড বদলালে সব সেশন নতুন করে শুরু হবে।</div></div></div>
+    <div class="g p"><div class="h3">ওয়েব ও টাইমজোন</div><div class="col"><div class="row"><span style="flex:1">আপনার টাইমজোন (রিপোর্ট ও "আজ" গণনা)</span><button class="btn sm" id="tz-go">${ic('clock')}ব্রাউজারের সাথে মেলান</button></div><div class="dim">এখন: ${S.settings.tzOffset == null ? 'সেট নেই' : 'UTC' + (S.settings.tzOffset >= 0 ? '+' : '') + (S.settings.tzOffset / 60)}</div></div></div>
+  </div>
+  <div class="grid c2"><div class="g p" id="ai-card"><div class="h3">AI সহায়ক (Mistral)</div><div class="col"><div><label>API key ${S.ai.keyMask ? `<span class="pill">${esc(S.ai.keyMask)}</span>` : ''}</label><input class="in" id="ai-k" type="password" placeholder="${S.ai.ready ? 'নতুন key দিলে বদলাবে' : 'Mistral API key'}" autocomplete="off"></div><div class="row"><select class="in" id="ai-m"><option>${esc(S.ai.model)}</option></select><button class="btn sm" id="ai-load">${ic('redo')}লোড</button></div><div class="row wrap"><button class="btn pri sm" id="ai-save">${ic('check')}সেভ</button>${S.ai.ready ? '<button class="btn bad sm" id="ai-clear">মুছুন</button>' : ''}</div></div></div>
+  <div class="g p" id="tk-card"><div class="h3">API টোকেন</div><div id="tk-list">লোড হচ্ছে...</div><div class="row wrap" style="margin-top:10px"><input class="in" id="tk-n" placeholder="টোকেনের নাম" style="max-width:200px"><select class="in" id="tk-s" style="max-width:200px"><option value="read">শুধু পড়া</option><option value="control">নিয়ন্ত্রণ</option></select><button class="btn pri sm" id="tk-add">${ic('plus')}তৈরি</button></div><div class="dim" style="margin-top:8px"><span class="mono">Authorization: Bearer mcht_...</span> হেডারে ব্যবহার করুন।</div></div></div>
+  <div class="g p" id="gd-card">লোড হচ্ছে...</div>
+  <div class="grid c2"><div class="g p" id="rep-card"><div class="h3">রিপোর্ট (CSV)</div><div class="row wrap"><button class="btn sm" data-rep="7">${ic('down')}৭ দিন</button><button class="btn sm" data-rep="30">${ic('down')}৩০ দিন</button><button class="btn sm" id="rep-drive">${ic('up')}Drive-এ</button></div><label class="row" style="gap:9px;margin-top:12px"><div class="sw ${S.settings.weeklyReport ? 'on' : ''}" id="rep-w"></div>প্রতি সোমবার সকাল ৯টায় Drive-এ সাপ্তাহিক রিপোর্ট</label></div>
+    <div class="g p"><div class="h3">ব্যাকআপ ও পুনরুদ্ধার (ফাইল)</div><div class="row wrap"><button class="btn sm" id="bk-dl">${ic('down')}JSON ডাউনলোড</button><button class="btn sm" id="bk-up">${ic('up')}JSON থেকে ফেরত</button><input type="file" id="bk-f" accept="application/json" hidden></div><div class="dim" style="margin-top:8px">ব্যাকআপে সব Worker, ফাইল, ENV ও SQLite ডাটা থাকে। এটি নিরাপদে রাখুন।</div></div></div>
+  <div class="g p" id="hk-card">লোড হচ্ছে...</div>
+  <div class="g p"><div class="h3">Workers-এর ডকুমেন্টেশন</div><div class="row wrap"><a class="btn sm" href="/api/openapi.json" target="_blank" rel="noopener">${ic('link')}OpenAPI</a><span class="dim">লগইন থাকলে খুলবে</span></div></div>
+  </div>`;
+  loadTokens(); loadDrive(); loadHooks(); bindSettings();
+}
+async function loadTokens() {
+  const el = $('#tk-list'); if (!el) return; const r = await api('/tokens'); if (!r.ok || !$('#tk-list')) return;
+  const tokens = r.tokens || []; el.innerHTML = tokens.length ? tokens.map((t) => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);gap:8px"><div style="flex:1"><b>${esc(t.name)}</b> <span class="pill">${t.scope === 'control' ? 'নিয়ন্ত্রণ' : 'শুধু পড়া'}</span><div class="dim">শেষ ব্যবহার ${t.lastUsed ? new Date(t.lastUsed).toLocaleString() : 'কখনো না'}</div></div><button class="btn bad sm" data-tkd="${t.id}">${ic('trash')}</button></div>`).join('') : '<div class="mut">কোনো টোকেন নেই</div>';
+  el.querySelectorAll('[data-tkd]').forEach((b) => (b.onclick = () => confirmBox('এই টোকেন বাতিল হবে।', async () => { await api('/tokens/' + b.dataset.tkd, 'DELETE'); loadTokens(); })));
+}
+async function loadDrive() {
+  const el = $('#gd-card'); if (!el) return; const r = await api('/gdrive'); if (!r.ok || !$('#gd-card')) return;
+  const g = r.gd || { connected: false, keep: 14 }; const when = (x) => (x ? new Date(x).toLocaleString() : 'এখনো নেই');
+  if (!g.connected) {
+    el.innerHTML = `<div class="h3">Google Drive ব্যাকআপ</div><div class="mut" style="margin-bottom:10px">সব Worker ও ডাটা একটি ফাইলে "MC Host Backups" ফোল্ডারে যাবে (শুধু এই অ্যাপের ফাইলে প্রবেশ, drive.file)।</div>
+    <ol class="mut" style="line-height:1.8;padding-left:20px;margin:0 0 12px"><li>Google Cloud Console-এ "Web application" OAuth ক্লায়েন্ট বানান।</li><li>Client ID ও Secret দিয়ে লিংক বানান।</li><li>দেখানো Redirect URI কনসোলের "Authorized redirect URIs"-এ যোগ করুন।</li><li>লিংক খুলে Google-এ লগইন করুন।</li></ol>
+    <div class="col"><input class="in" id="gd-id" placeholder="Client ID (xxxx.apps.googleusercontent.com)"><input class="in" id="gd-sec" type="password" placeholder="Client Secret"><button class="btn pri sm" id="gd-go" style="align-self:flex-start">${ic('link')}লিংক বানান</button><div id="gd-out"></div></div>`;
+    $('#gd-go').onclick = async () => { const x = await api('/gdrive/setup', 'POST', { clientId: $('#gd-id').value.trim(), clientSecret: $('#gd-sec').value.trim() }); if (!x.ok) return toast(x.error, 'bad'); $('#gd-out').innerHTML = `<div class="alert ok">Redirect URI: <span class="mono" style="word-break:break-all">${esc(x.redirectUri)}</span> <button class="btn sm" id="gd-cp">${ic('copy')}</button><div style="margin-top:10px"><a class="btn pri sm" href="${esc(x.authUrl)}" target="_blank" rel="noopener">Google-এ লগইন</a></div></div>`; $('#gd-cp').onclick = () => copyText(x.redirectUri); };
+    return;
+  }
+  el.innerHTML = `<div class="row wrap" style="margin-bottom:10px"><div class="h3" style="margin:0;flex:1">Google Drive ব্যাকআপ</div><span class="pill" style="color:var(--ok)">সংযুক্ত</span></div>
+  <div class="grid c2"><div class="col" style="gap:6px"><div class="mut">শেষ ব্যাকআপ: <b>${when(g.lastBackup)}</b></div><div class="mut">সাইজ ${g.lastSize ? kb(g.lastSize) : '—'} · সর্বশেষ ${g.keep}টি রাখা হয়</div>${g.lastError ? `<div style="color:var(--bad)">শেষ ত্রুটি: ${esc(g.lastError)}</div>` : ''}<div class="row wrap"><button class="btn pri sm" id="gd-now">${ic('up')}এখনই ব্যাকআপ</button><button class="btn bad sm" id="gd-off">বিচ্ছিন্ন</button></div></div>
+  <div class="col" style="gap:9px"><select class="in" id="gd-auto">${[0, 1, 6, 12, 24].map((h) => `<option value="${h}" ${g.autoHours === h ? 'selected' : ''}>${h ? 'প্রতি ' + h + ' ঘণ্টায়' : 'স্বয়ংক্রিয় বন্ধ'}</option>`).join('')}</select><input class="in" id="gd-keep" type="number" min="3" max="60" value="${g.keep}"><button class="btn sm" id="gd-save" style="align-self:flex-start">${ic('check')}সেভ</button></div></div>
+  <div style="margin-top:12px">${(r.files || []).map((f) => `<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line);gap:8px"><span class="mono" style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(f.name)}</span><span class="dim">${kb(Number(f.size || 0))}</span><button class="btn sm" data-gdr="${esc(f.id)}">${ic('undo')}ফিরুন</button><button class="btn bad sm" data-gdd="${esc(f.id)}">${ic('trash')}</button></div>`).join('') || '<div class="mut">এখনো ব্যাকআপ নেই</div>'}</div>`;
+  $('#gd-now').onclick = async () => { toast('Drive-এ ব্যাকআপ হচ্ছে...', 'ok'); const x = await api('/gdrive/backup', 'POST'); x.ok ? toast('ব্যাকআপ সম্পন্ন', 'ok') : toast(x.error, 'bad'); loadDrive(); };
+  $('#gd-off').onclick = () => confirmBox('Drive-এর সংযোগ বিচ্ছিন্ন হবে।', async () => { await api('/gdrive/disconnect', 'POST'); loadDrive(); });
+  $('#gd-save').onclick = async () => { const x = await api('/gdrive/settings', 'PUT', { autoHours: Number($('#gd-auto').value), keep: Number($('#gd-keep').value) }); x.ok ? toast('সেভ হয়েছে', 'ok') : toast(x.error, 'bad'); };
+  el.querySelectorAll('[data-gdr]').forEach((b) => (b.onclick = () => confirmBox('এই ব্যাকআপে ফিরলে বর্তমান অবস্থা বদলাবে। আগে বর্তমানের ব্যাকআপ নেওয়া হবে।', async () => { await api('/gdrive/backup', 'POST'); const x = await api('/gdrive/restore', 'POST', { id: b.dataset.gdr }); x.ok ? toast('পুনরুদ্ধার সম্পন্ন', 'ok') : toast(x.error, 'bad'); refresh(); })));
+  el.querySelectorAll('[data-gdd]').forEach((b) => (b.onclick = () => confirmBox('এই ব্যাকআপ Drive থেকে মুছবে?', async () => { await api('/gdrive/backups/' + b.dataset.gdd, 'DELETE'); loadDrive(); })));
+}
+async function loadHooks() {
+  const el = $('#hk-card'); if (!el) return; const r = await api('/hooks'); if (!r.ok || !$('#hk-card')) return;
+  const acts = { 'restart-worker': 'Worker রিস্টার্ট', 'start-worker': 'Worker চালু', 'stop-worker': 'Worker বন্ধ', 'backup-drive': 'Drive ব্যাকআপ' };
+  el.innerHTML = `<div class="h3">ওয়েবহুক (GitHub বা অন্য সেবা থেকে ট্রিগার)</div>
+  ${(r.hooks || []).map((x) => `<div class="row" style="padding:9px 0;border-bottom:1px solid var(--line);gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:200px"><b>${esc(x.name)}</b> <span class="pill">${esc(acts[x.action] || x.action)}</span><div class="mono dim" style="word-break:break-all">${esc(x.url)}</div><div class="dim">সিক্রেট: <span class="mono">${esc(x.secret)}</span> · ${x.fired} বার</div></div><button class="btn sm" data-hc="${esc(x.url)}|${esc(x.secret)}">${ic('copy')}</button><button class="btn bad sm" data-hd="${esc(x.id)}">${ic('trash')}</button></div>`).join('') || '<div class="mut">কোনো হুক নেই</div>'}
+  <div class="grid c2" style="margin-top:12px;gap:10px"><input class="in" id="hk-n" placeholder="নাম (যেমন github-deploy)"><select class="in" id="hk-a">${Object.entries(acts).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select><select class="in" id="hk-w" style="grid-column:1/-1">${S.workers.map((w) => `<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></div>
+  <button class="btn pri sm" id="hk-add" style="margin-top:10px">${ic('plus')}হুক যোগ</button>`;
+  el.querySelectorAll('[data-hc]').forEach((b) => (b.onclick = () => copyText(b.dataset.hc.replace('|', '\n'))));
+  el.querySelectorAll('[data-hd]').forEach((b) => (b.onclick = () => confirmBox('হুক বাতিল হবে।', async () => { await api('/hooks/' + b.dataset.hd, 'DELETE'); loadHooks(); })));
+  $('#hk-add').onclick = async () => { const act = $('#hk-a').value; const x = await api('/hooks', 'POST', { name: $('#hk-n').value.trim(), action: act, target: act.endsWith('worker') ? $('#hk-w').value : '' }); if (!x.ok) return toast(x.error, 'bad'); toast('হুক তৈরি। URL ও সিক্রেট কপি করে সেবায় বসান।', 'ok'); loadHooks(); };
+}
+function bindSettings() {
+  $('#pw-go').onclick = async () => { const r = await api('/password', 'POST', { current: $('#pw-c').value, next: $('#pw-n').value }); if (r.ok) { if (r.token) try { localStorage.setItem('mch-token', r.token); } catch { /* ignore */ } toast('পাসওয়ার্ড বদলেছে', 'ok'); $('#pw-c').value = $('#pw-n').value = ''; } else toast(r.error, 'bad'); };
+  $('#tz-go').onclick = async () => { await api('/settings', 'PUT', { tzOffset: -new Date().getTimezoneOffset() }); toast('টাইমজোন সেট হয়েছে', 'ok'); refresh(); };
+  $('#tk-add').onclick = async () => { const r = await api('/tokens', 'POST', { name: $('#tk-n').value.trim(), scope: $('#tk-s').value }); if (!r.ok) return toast(r.error, 'bad'); const o = modal(`<h3 style="margin:0 0 8px">টোকেন তৈরি</h3><p class="mut" style="margin:0 0 10px">এটি এখনই একবার দেখানো হচ্ছে, কপি করে রাখুন।</p><pre class="term" style="height:auto;white-space:pre-wrap;word-break:break-all">${esc(r.token)}</pre><div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-cp>${ic('copy')}কপি</button><button class="btn pri" data-ok>হয়েছে</button></div>`); $('[data-cp]', o).onclick = () => copyText(r.token); $('[data-ok]', o).onclick = () => { o.remove(); loadTokens(); }; $('#tk-n').value = ''; };
+  $('#ai-load') && ($('#ai-load').onclick = async () => { const r = await api('/ai/models'); if (!r.ok) return toast(r.error, 'bad'); $('#ai-m').innerHTML = r.models.map((m) => `<option ${m === r.current ? 'selected' : ''}>${esc(m)}</option>`).join(''); toast(r.models.length + 'টি মডেল', 'ok'); });
+  $('#ai-save') && ($('#ai-save').onclick = async () => { const body = { mistralModel: $('#ai-m').value }; if ($('#ai-k').value.trim()) body.mistralKey = $('#ai-k').value.trim(); const r = await api('/ai/settings', 'PUT', body); r.ok ? toast('AI সেটিংস সেভ', 'ok') : toast(r.error, 'bad'); refresh(); });
+  $('#ai-clear') && ($('#ai-clear').onclick = () => confirmBox('API key মুছবেন?', async () => { await api('/ai/settings', 'PUT', { mistralKey: '' }); refresh(); }));
+  $('#rep-w').onclick = async () => { const on = !S.settings.weeklyReport; await api('/reports/settings', 'PUT', { weekly: on }); toast(on ? 'সাপ্তাহিক রিপোর্ট চালু' : 'বন্ধ', 'ok'); refresh(); };
+  document.querySelectorAll('[data-rep]').forEach((b) => (b.onclick = async () => { try { saveBlob(await apiBlob(`/reports/csv?days=${b.dataset.rep}&tz=${tzo()}`), `mc-host-workers-${b.dataset.rep}d.csv`); } catch (e) { toast(e.message, 'bad'); } }));
+  $('#rep-drive').onclick = async () => { const x = await api('/reports/drive', 'POST', { days: 30, tz: tzo() }); x.ok ? toast('রিপোর্ট Drive-এ: ' + x.file.name, 'ok') : toast(x.error, 'bad'); };
+  $('#bk-dl').onclick = async () => { try { saveBlob(await apiBlob('/backup'), 'mc-host-backup.json'); } catch (e) { toast(e.message, 'bad'); } };
+  $('#bk-up').onclick = () => $('#bk-f').click();
+  $('#bk-f').onchange = (e) => { const f = e.target.files[0]; if (!f) return; confirmBox('বর্তমান সব Worker বদলে ব্যাকআপ থেকে ফিরবে। নিশ্চিত?', async () => { const r = await api('/restore', 'POST', JSON.parse(await f.text())); r.ok ? toast(`ফিরেছে: ${r.workers}টি Worker`, 'ok') : toast(r.error, 'bad'); refresh(); }); e.target.value = ''; };
+}
+function bindCommon() {
+  document.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => go(b.dataset.go === 'workers/new' ? 'workers' : b.dataset.go)));
+  document.querySelectorAll('[data-open]').forEach((b) => { if (b.tagName === 'TR' || b.tagName === 'BUTTON') b.onclick = () => go('w/' + b.dataset.open); });
+  document.querySelectorAll('[data-bulk]').forEach((b) => (b.onclick = async () => { const r = await api('/workers/bulk/' + b.dataset.bulk, 'POST', {}); r.ok ? toast(`${r.n}টি Worker: ${b.dataset.bulk}`, 'ok') : toast(r.error, 'bad'); refresh(); }));
+  const nb = $('#dash [data-go="workers"]'); void nb;
+}
+/* ---------- বুট ---------- */
+async function start() {
+  const me = await api('/me'); if (!me.ok) return showLogin();
+  $('#login').classList.add('hide'); $('#app').classList.remove('hide');
+  const s = await api('/state?tz=' + tzo()); if (!s.ok) return showLogin();
+  S = s; renderCurrent(false); startLive();
+  if (location.hash.includes('gdrive=')) { const m = location.hash.match(/gdrive=(ok|err:(.*))/); history.replaceState(null, '', location.pathname + '#/settings'); if (m) setTimeout(() => toast(m[1] === 'ok' ? 'Google Drive সংযুক্ত' : 'সংযোগ ব্যর্থ: ' + decodeURIComponent(m[2] || ''), m[1] === 'ok' ? 'ok' : 'bad'), 500); renderCurrent(false); }
+}
+(function () { try { const t = localStorage.getItem('mch-theme'); if (t) document.documentElement.dataset.theme = t; const a = localStorage.getItem('mch-accent'); if (a) document.documentElement.dataset.accent = a; } catch { /* ignore */ } })();
+/* ব্যাকগ্রাউন্ড (হালকা, কম CPU) */
+(function () {
+  const cv = document.getElementById('fx'); if (!cv || (matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+  const ctx = cv.getContext('2d'); let w = 0, h = 0, t0 = 0; const dpr = Math.min(1.25, devicePixelRatio || 1);
+  const size = () => { w = innerWidth; h = innerHeight; cv.width = w * dpr; cv.height = h * dpr; cv.style.width = w + 'px'; cv.style.height = h + 'px'; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+  addEventListener('resize', size); size();
+  const parts = Array.from({ length: 36 }, () => ({ x: Math.random(), y: Math.random(), z: Math.random() * .8 + .2, v: Math.random() * .00005 + .00002, p: Math.random() * 6.28 }));
+  const frame = (now) => { requestAnimationFrame(frame); if (document.hidden || now - t0 < 50) return; t0 = now; ctx.clearRect(0, 0, w, h); const light = document.documentElement.dataset.theme === 'light'; const cs = getComputedStyle(document.documentElement); const c = ['--a1', '--a2', '--a3'].map((k) => cs.getPropertyValue(k).trim() || '#7c5cff');
+    ctx.globalCompositeOperation = light ? 'multiply' : 'lighter';
+    for (const p of parts) { p.y -= p.v * 14; if (p.y < -.05) { p.y = 1.05; p.x = Math.random(); } const a = (.3 + .3 * Math.sin(now / 900 + p.p)) * p.z * (light ? .5 : 1); ctx.fillStyle = c[(p.p * 10 | 0) % 3]; ctx.globalAlpha = a; ctx.beginPath(); ctx.arc(p.x * w, p.y * h, p.z * 2, 0, 6.283); ctx.fill(); }
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; };
+  requestAnimationFrame(frame);
+})();
+start();
+</script>
+</body>
+</html>
