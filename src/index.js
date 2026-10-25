@@ -32,10 +32,11 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
   // ---------- পাসওয়ার্ড ও সেশন ----------
   const envPw = clean(process.env.ADMIN_PASSWORD);
   if (store.setting('customPassword') && envPw && envPw !== store.setting('customPasswordEnv', envPw)) store.setSetting('customPassword', '');
-  let password = clean(store.setting('customPassword')) || envPw || store.setting('autoPassword');
-  if (!password) { password = crypto.randomBytes(5).toString('hex'); store.setSetting('autoPassword', password); }
-  const pwMode = () => (store.setting('customPassword') ? 'custom' : envPw ? 'env' : 'auto');
-  console.log(pwMode() === 'auto' ? `[auth] ADMIN_PASSWORD সেট নেই। অটো পাসওয়ার্ড: ${password}` : `[auth] পাসওয়ার্ড উৎস: ${pwMode() === 'custom' ? 'ড্যাশবোর্ড' : 'ADMIN_PASSWORD env'}`);
+  // পাসওয়ার্ড: ড্যাশবোর্ড > ADMIN_PASSWORD env > ডিফল্ট 1234
+  const DEFAULT_PW = '1234';
+  let password = clean(store.setting('customPassword')) || envPw || DEFAULT_PW;
+  const pwMode = () => (store.setting('customPassword') ? 'custom' : envPw ? 'env' : 'default');
+  console.log(pwMode() === 'default' ? '[auth] কোনো পাসওয়ার্ড সেট নেই: ডিফল্ট 1234 ব্যবহার হচ্ছে। সেটিংস থেকে বদলান।' : `[auth] পাসওয়ার্ড উৎস: ${pwMode() === 'custom' ? 'ড্যাশবোর্ড' : 'ADMIN_PASSWORD env'}`);
   const secret = crypto.createHash('sha256').update('mchost3|' + password).digest();
   const sign = (v) => crypto.createHmac('sha256', secret).update(v).digest('hex');
   const mkCookie = () => { const exp = String(Date.now() + 7 * 864e5); return `${exp}.${sign(exp)}`; };
@@ -123,6 +124,18 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
     return true;
   };
   app.get('/v1/models', (req, res) => { if (!v1Auth(req, res)) return; res.json({ object: 'list', data: [{ id: gw.cfg().model, object: 'model', created: 0, owned_by: 'mc-host' }] }); });
+  app.post('/v1/embeddings', guard(async (req, res) => {
+    if (!v1Auth(req, res)) return;
+    if (!req.body || req.body.input === undefined) return res.status(400).json({ error: { message: 'input দিন', type: 'invalid_request_error' } });
+    try { const r = await gw.forward('/embeddings', req.body, { src: 'api' }); res.setHeader('x-mc-provider', encodeURIComponent(r.provider)); res.json(r.json); }
+    catch (e) { res.status(e.status === 400 ? 400 : 503).json({ error: { message: e.message, type: 'gateway_error' } }); }
+  }));
+  app.post('/v1/images/generations', guard(async (req, res) => {
+    if (!v1Auth(req, res)) return;
+    if (!req.body || !req.body.prompt) return res.status(400).json({ error: { message: 'prompt দিন', type: 'invalid_request_error' } });
+    try { const r = await gw.forward('/images/generations', req.body, { src: 'api', timeout: 180000 }); res.setHeader('x-mc-provider', encodeURIComponent(r.provider)); res.json(r.json); }
+    catch (e) { res.status(e.status === 400 ? 400 : 503).json({ error: { message: e.message, type: 'gateway_error' } }); }
+  }));
   app.post('/v1/chat/completions', guard(async (req, res) => {
     if (!v1Auth(req, res)) return;
     const b = req.body || {};
@@ -257,6 +270,20 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
   });
   app.delete('/api/gateway/providers/:id', (req, res) => { gw.remove(req.params.id); audit(req, 'gateway-remove', req.params.id); ok(res); });
   app.post('/api/gateway/providers/:id/test', guard(async (req, res) => { const p = gw.find(req.params.id); if (!p) return fail(res, 'provider নেই', 404); await gw.test(p); ok(res, { status: p.status, lastError: p.lastError, models: p.models || [], latency: p.latency, credits: p.credits }); }));
+  // Playground: মডেল, প্যারামিটার ও স্ট্রিম/নন-স্ট্রিম সহ পুরো গেটওয়ে পথে পরীক্ষা
+  app.post('/api/gateway/playground', guard(async (req, res) => {
+    const b = req.body || {};
+    const msgs = Array.isArray(b.messages) && b.messages.length ? b.messages.slice(-80) : [{ role: 'user', content: String(b.text || '') }];
+    if (!msgs.some((m) => m && m.content)) return fail(res, 'মেসেজ ফাঁকা');
+    const opts = { model: b.model && b.model !== gw.cfg().model ? String(b.model) : undefined, temperature: b.temperature, max_tokens: Number(b.max_tokens) || undefined, src: 'panel' };
+    if (!b.stream) { try { const r = await gw.chat(msgs, opts); ok(res, r); } catch (e) { fail(res, e.message, 503); } return; }
+    const it = gw.streamChat(msgs, opts)[Symbol.asyncIterator]();
+    let first; try { first = await it.next(); } catch (e) { return fail(res, e.message, 503); }
+    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', 'x-accel-buffering': 'no' });
+    try { if (!first.done) res.write(first.value); for (;;) { const n = await it.next(); if (n.done) break; res.write(n.value); } }
+    catch (e) { res.write(`data: ${JSON.stringify({ error: { message: e.message } })}\n\n`); }
+    res.end();
+  }));
   app.post('/api/gateway/chat-stream', guard(async (req, res) => {
     const text = String((req.body || {}).text || '').trim(); if (!text) return fail(res, 'মেসেজ ফাঁকা');
     const it = gw.streamChat([{ role: 'user', content: text }], { src: 'panel' })[Symbol.asyncIterator]();
@@ -320,7 +347,7 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
     if (String(b.code || '').length > 900000) return fail(res, 'worker.js অনেক বড়');
     let files = Array.isArray(b.files) && b.files.length ? b.files : null;
     if (!files && b.template) { const t = TEMPLATES.find((x) => x.key === b.template); if (!t) return fail(res, 'টেমপ্লেট নেই'); files = tplFiles(t); }
-    const w = workers.create({ name: b.name, slug: b.slug, code: b.code, files, env: b.env, cronMin: b.cronMin, entry: b.entry, memoryMb: b.memoryMb, idleMin: b.idleMin, dailyLimit: b.dailyLimit });
+    const w = workers.create({ name: b.name, slug: b.slug, code: b.code, files, env: b.env, cronMin: b.cronMin, entry: b.entry, idleMin: b.idleMin });
     const deploy = await workers.deploy(w.id);
     ok(res, { id: w.id, slug: w.slug, deploy });
   }));
@@ -334,12 +361,7 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
   app.get('/api/workers/:id', withWk((w, req, res) => { const tz = tzOf(req); ok(res, { w: workerRow(w, tz), agg: workers.agg([w.id], tz), lat: workers.latency(w.id), extra: workers.extra(w.id), recent: workers.recent(w.id) }); }));
   app.patch('/api/workers/:id', withWk(async (w, req, res) => {
     const b = req.body || {};
-    if (b.concurrency !== undefined) { const n = Number(b.concurrency); w.concurrency = Number.isFinite(n) && n > 0 ? Math.min(1e6, Math.floor(n)) : 0; }
-    if (b.memoryMb !== undefined) w.memoryMb = normMemory(b.memoryMb);
-    if (b.idleMin !== undefined) w.idleMin = normIdle(b.idleMin);
-    if (b.dailyLimit !== undefined) w.dailyLimit = normCount(b.dailyLimit);
     if (b.strictTests !== undefined) w.strictTests = !!b.strictTests;
-    if (b.budget !== undefined) { const bu = b.budget || {}; w.budget = { p95Ms: Math.max(0, Math.min(60000, Number(bu.p95Ms) || 0)), errPct: Math.max(0, Math.min(100, Number(bu.errPct) || 0)) }; }
     if (b.domain !== undefined) {
       const d = String(b.domain || '').trim().toLowerCase();
       if (d) {
@@ -348,9 +370,7 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
       }
       w.domain = d; store.save();
     }
-    const needRestart = b.memoryMb !== undefined;
     workers.update(w, b);
-    if (needRestart && w.enabled) await workers.start(w.id);
     ok(res);
   }));
   app.delete('/api/workers/:id', withWk(async (w, req, res) => { await workers.remove(w.id); ok(res); }));

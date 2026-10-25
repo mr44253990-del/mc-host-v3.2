@@ -1,6 +1,6 @@
 {
   "name": "mc-host-workers",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "description": "Workers-only hosting panel: upload, run, monitor and back up Workers (low RAM)",
   "main": "index.js",
   "scripts": {

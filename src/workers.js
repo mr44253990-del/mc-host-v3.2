@@ -11,7 +11,7 @@ const { rssOf } = require('./sys');
 
 const HOST = path.join(__dirname, 'worker-host.js');
 const HEAP = Number(process.env.WORKER_HEAP_MB) || 64;
-const IDLE_DEFAULT = 2; // মিনিট; 0 = সবসময় চালু
+const IDLE_DEFAULT = 0; // মিনিট; 0 = সবসময় চালু (ডিফল্ট)
 const MEM_CAP = 16384;   // সীমাহীন মানে 0; বড় মান শুধু নিরাপত্তার জন্য সীমাবদ্ধ
 const REQ_TIMEOUT = 30000;
 const BUCKET = 15 * 60000;
@@ -254,7 +254,7 @@ class Workers extends EventEmitter {
   view(w) {
     const rt = this._rt(w.id);
     if (!rt.fc || Date.now() - rt.fc.t > 10000) { const fl = this.listFiles(w.id); rt.fc = { t: Date.now(), count: fl.length, size: fl.reduce((s, f) => s + f.size, 0) }; }
-    return { id: w.id, name: w.name, slug: w.slug, domain: w.domain || '', enabled: !!w.enabled, ram: rssOf(rt.proc && rt.proc.pid), memoryMb: w.memoryMb === undefined ? HEAP : Number(w.memoryMb) || 0, idleMin: w.idleMin === undefined ? IDLE_DEFAULT : Number(w.idleMin), dailyLimit: Number(w.dailyLimit) || 0, dailyUsed: rt.day === new Date().toISOString().slice(0, 10) ? rt.dayCount : 0, lastReq: rt.lastReq || 0, cronMin: w.cronMin || 0, rateLimit: w.rateLimit || 0, entry: this.entryOf(w) || w.entry || 'worker.js', envCount: (w.env || []).length, fileCount: rt.fc.count, totalSize: rt.fc.size, createdAt: w.createdAt, updatedAt: w.updatedAt, state: rt.state, error: rt.error, startedAt: rt.startedAt, inflight: rt.inflight, versions: this.versions(w.id).length, kvKeys: rt.kvKeys };
+    return { id: w.id, name: w.name, slug: w.slug, domain: w.domain || '', enabled: !!w.enabled, ram: rssOf(rt.proc && rt.proc.pid), memoryMb: Number(w.memoryMb) || 0, idleMin: w.idleMin === undefined ? IDLE_DEFAULT : Number(w.idleMin), dailyLimit: Number(w.dailyLimit) || 0, dailyUsed: rt.day === new Date().toISOString().slice(0, 10) ? rt.dayCount : 0, lastReq: rt.lastReq || 0, cronMin: w.cronMin || 0, rateLimit: w.rateLimit || 0, entry: this.entryOf(w) || w.entry || 'worker.js', envCount: (w.env || []).length, fileCount: rt.fc.count, totalSize: rt.fc.size, createdAt: w.createdAt, updatedAt: w.updatedAt, state: rt.state, error: rt.error, startedAt: rt.startedAt, inflight: rt.inflight, versions: this.versions(w.id).length, kvKeys: rt.kvKeys };
   }
 
   cleanEnv(list, old = []) {
@@ -524,7 +524,7 @@ class Workers extends EventEmitter {
   }
 
   _limited(w, ip) {
-    if (!w.rateLimit) return false;
+    return false; // কোনো রেট লিমিট নেই
     const k = w.id + '|' + ip, now = Date.now();
     let e = this._rl.get(k);
     if (!e || e.reset < now) { e = { n: 0, reset: now + 60000 }; this._rl.set(k, e); }
@@ -541,13 +541,11 @@ class Workers extends EventEmitter {
     rt.lastReq = Date.now();
     const today = new Date().toISOString().slice(0, 10);
     if (rt.day !== today) { rt.day = today; rt.dayCount = 0; }
-    if (!skipLimit && w.dailyLimit && rt.dayCount >= Number(w.dailyLimit)) return done(plain(429, 'আজকের দৈনিক সীমা শেষ (dailyLimit)'), 'limited');
     rt.dayCount++;
     if (rt.state === 'sleeping') { const woke = await this._wake(w); if (!woke) return done(plain(503, 'Worker জাগাতে ব্যর্থ'), 'unavail', rt.error); }
     for (let i = 0; i < 50 && rt.state === 'starting'; i++) await new Promise((r) => setTimeout(r, 100));
     if (rt.state !== 'running' || !rt.proc) return done(plain(503, 'Worker unavailable'), 'unavail', rt.error);
     if (!skipLimit && this._limited(w, ip)) { const o = plain(429, 'Rate limit exceeded'); o.headers.push(['retry-after', '60']); return done(o, 'limited'); }
-    if (w.concurrency > 0 && rt.inflight >= w.concurrency) return plain(429, 'Too many requests (concurrency সীমা)');
     rt.inflight++;
     try {
       const out = await this._call(rt, { method, url, headers, body });

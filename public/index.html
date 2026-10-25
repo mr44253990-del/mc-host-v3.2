@@ -36,7 +36,7 @@ header{display:flex;align-items:center;gap:12px;padding:18px 24px 6px}
 header h2{margin:0;font-size:21px;flex:1}
 #view{flex:1;overflow:auto;padding:10px 24px 40px}
 #view::-webkit-scrollbar{width:8px}#view::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
-.g{background:var(--glass);border:1px solid var(--line);border-radius:var(--r);backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%);box-shadow:0 18px 44px -26px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.1);position:relative}
+.g{background:var(--glass);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 18px 44px -26px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.1);position:relative}
 .p{padding:18px}
 .grid{display:grid;gap:14px}
 .k4{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
@@ -92,10 +92,10 @@ label{display:block;font-size:12px;color:var(--t3);margin:0 0 6px}
 .msg{max-width:86%;padding:11px 14px;border-radius:16px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
 .msg.u{align-self:flex-end;background:linear-gradient(135deg,var(--a1),#5a45d6);color:#fff}
 .msg.a{align-self:flex-start;background:var(--glass2);border:1px solid var(--line)}
-.ov{position:fixed;inset:0;z-index:50;background:rgba(3,4,12,.6);backdrop-filter:blur(8px);display:grid;place-items:center;padding:16px}
+.ov{position:fixed;inset:0;z-index:50;background:rgba(3,4,12,.6);display:grid;place-items:center;padding:16px}
 .md{width:min(560px,100%);max-height:92vh;overflow:auto;padding:22px}
 #toasts{position:fixed;right:16px;top:16px;z-index:90;display:flex;flex-direction:column;gap:8px}
-.toast{padding:11px 15px;border-radius:14px;background:var(--glass2);border:1px solid var(--line);backdrop-filter:blur(18px);max-width:340px}
+.toast{padding:11px 15px;border-radius:14px;background:var(--glass2);border:1px solid var(--line);max-width:340px}
 .toast.bad{border-color:rgba(255,90,115,.5)}.toast.ok{border-color:rgba(53,230,160,.5)}
 #login{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:20px}
 #login .g{width:min(370px,100%);padding:30px;text-align:center}
@@ -106,7 +106,7 @@ label{display:block;font-size:12px;color:var(--t3);margin:0 0 6px}
 </style>
 </head>
 <body>
-<canvas id="fx"></canvas>
+
 <div id="toasts"></div>
 
 <div id="login" class="hide">
@@ -218,7 +218,7 @@ function buildNav() {
   $('#out').innerHTML = ic('out') + '<span>লগআউট</span>';
 }
 function showLogin() { stopLive(); $('#app').classList.add('hide'); $('#login').classList.remove('hide'); try { localStorage.removeItem('mch-token'); } catch { /* ignore */ } loginInfo(); setTimeout(() => $('#pw').focus(), 40); }
-async function loginInfo() { const r = await api('/login-info'); if (!r || !r.ok) return; $('#lg-hint').textContent = r.mode === 'auto' ? 'ADMIN_PASSWORD সেট নেই। সার্ভার কনসোলে ছাপা অটো পাসওয়ার্ড দিন।' : r.mode === 'env' ? 'পাসওয়ার্ড ADMIN_PASSWORD env থেকে আসছে।' : 'পাসওয়ার্ড ড্যাশবোর্ড থেকে বদলানো হয়েছে।'; if (r.wait) $('#lg-err').innerHTML = `<div class="alert bad">অনেকবার ভুল হয়েছে। ${Math.ceil(r.wait / 60)} মিনিট পরে চেষ্টা করুন</div>`; }
+async function loginInfo() { const r = await api('/login-info'); if (!r || !r.ok) return; $('#lg-hint').textContent = r.mode === 'default' ? 'কোনো পাসওয়ার্ড সেট নেই: ডিফল্ট 1234 দিয়ে প্রবেশ করুন।' : r.mode === 'env' ? 'পাসওয়ার্ড ADMIN_PASSWORD env থেকে আসছে।' : 'পাসওয়ার্ড ড্যাশবোর্ড থেকে বদলানো হয়েছে।'; if (r.wait) $('#lg-err').innerHTML = `<div class="alert bad">অনেকবার ভুল হয়েছে। ${Math.ceil(r.wait / 60)} মিনিট পরে চেষ্টা করুন</div>`; }
 $('#lgf').onsubmit = async (e) => {
   e.preventDefault(); const r = await api('/login', 'POST', { password: $('#pw').value });
   if (!r.ok) { $('#lg-err').innerHTML = `<div class="alert bad">${esc(r.error)}</div>`; return; }
@@ -276,7 +276,7 @@ function renderDash(onlyLive) {
   const hr = new Date().getHours(), greet = hr < 12 ? 'সুপ্রভাত' : hr < 17 ? 'শুভ অপরাহ্ন' : hr < 21 ? 'শুভ সন্ধ্যা' : 'শুভ রাত্রি';
   const issues = S.insights.filter((x) => x.level === 'bad' || x.level === 'warn').length;
   const cpuPct = h.cpus ? Math.min(100, h.load[0] / h.cpus * 100) : 0;
-  $('#view').innerHTML = `<div id="dash" class="col" style="gap:16px">
+  $('#view').innerHTML = `<div id="dash" class="col" style="gap:16px">${S.pwMode === 'default' ? '<div class="alert warn">ডিফল্ট পাসওয়ার্ড (1234) ব্যবহার হচ্ছে। সেটিংস > পাসওয়ার্ড থেকে এখনই বদলান।</div>' : ''}
   <div class="g p" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;background:linear-gradient(135deg,color-mix(in srgb,var(--a1) 22%,transparent),color-mix(in srgb,var(--a2) 9%,transparent)),var(--glass)">
     <div style="flex:1;min-width:220px"><div class="dim">${greet} · ${new Date().toLocaleDateString('bn-BD', { weekday: 'long', day: 'numeric', month: 'long' })}</div><h3 style="font-size:24px;margin:4px 0">${issues ? issues + 'টি সতর্কতা আছে' : 'সব Worker স্বাভাবিক'}</h3><div class="mut" id="d-sum">${f.running} চলছে · ${f.sleeping} ঘুমন্ত · ${f.stopped} বন্ধ · মোট RAM ${nf(f.ram)}MB</div><div class="row wrap" style="margin-top:12px"><button class="btn pri sm" data-go="workers/new">${ic('plus')}নতুন Worker</button><button class="btn sm" data-bulk="start">${ic('play')}সব চালু</button><button class="btn sm" data-bulk="stop">${ic('stop')}সব বন্ধ</button></div></div>
     <div class="row" style="gap:18px">${ring(100 - usedPct, 84)}<div><div class="dim">হোস্ট RAM ব্যবহার</div><b id="d-hram" style="font-size:20px">${nf(h.usedMem)} / ${nf(h.totalMem)} MB</b></div></div>
@@ -338,14 +338,10 @@ function paintWorkerList() {
   el.querySelectorAll('[data-act]').forEach((b) => (b.onclick = async (e) => { e.stopPropagation(); const r = await api(`/workers/${b.dataset.id}/${b.dataset.act}`, 'POST'); r.ok ? toast('সম্পন্ন', 'ok') : toast(r.error, 'bad'); refresh(); }));
 }
 function workerCard(w) {
-  const lim = w.memoryMb || 0, ramPct = lim && w.ram ? Math.min(100, w.ram / lim * 100) : 0;
   const hot = w.today.req ? w.today.err / w.today.req * 100 : 0;
   return `<div class="g wcard" data-open="${w.id}">
     <div class="row"><div style="flex:1;min-width:0"><div class="nm">${esc(w.name)}</div><div class="mono dim" style="overflow:hidden;text-overflow:ellipsis">/w/${esc(w.slug)}</div></div>${pill(w.state)}</div>
-    <div class="col" style="gap:9px;margin-top:14px">
-      <div><div class="row"><span class="dim" style="flex:1">RAM</span><span class="mono">${w.ram ? nf(w.ram) : '0'} MB${lim ? ' / ' + lim + ' MB' : ' · সীমাহীন'}</span></div><div class="bar"><i style="width:${ramPct.toFixed(1)}%;${ramPct > 85 ? 'background:var(--bad)' : ''}"></i></div></div>
-      <div class="row wrap" style="gap:6px"><span class="pill">আজ ${nf(w.today.req)}</span><span class="pill" style="${hot > 5 ? 'color:var(--bad)' : ''}">ত্রুটি ${w.today.err}</span><span class="pill">${avgMs(w.today)} ms</span><span class="pill">${w.cpuPerReq} ms CPU</span>${w.idleMin > 0 ? `<span class="pill">${Math.round(w.idleMin * 60)} সে পর ঘুম</span>` : '<span class="pill">সব সময় চালু</span>'}</div>
-    </div>
+    <div class="row wrap" style="gap:6px;margin-top:14px"><span class="pill">RAM ${w.ram ? nf(w.ram) : 0} MB</span><span class="pill">আজ ${nf(w.today.req)}</span><span class="pill" style="${hot > 5 ? 'color:var(--bad)' : ''}">ত্রুটি ${w.today.err}</span><span class="pill">${avgMs(w.today)} ms</span><span class="pill">${w.cpuPerReq} ms CPU</span>${w.idleMin > 0 ? `<span class="pill">${Math.round(w.idleMin * 60)} সে পর ঘুম</span>` : '<span class="pill">সব সময় চালু</span>'}</div>
     <div class="row" style="margin-top:14px" onclick="event.stopPropagation()">${w.enabled ? `<button class="btn bad sm" data-act="stop" data-id="${w.id}">${ic('stop')}বন্ধ</button><button class="btn sm" data-act="restart" data-id="${w.id}">${ic('redo')}রিস্টার্ট</button>` : `<button class="btn ok sm" data-act="start" data-id="${w.id}">${ic('play')}চালু</button>`}<span class="sp"></span><a class="btn sm" href="/w/${esc(w.slug)}" target="_blank" rel="noopener">${ic('globe')}খুলুন</a></div></div>`;
 }
 function newWorkerModal() {
@@ -354,18 +350,19 @@ function newWorkerModal() {
   <div class="col">
     <div class="grid c2" style="gap:10px"><div><label>নাম</label><input class="in" id="nw-n" placeholder="my-api"><div class="dim mono" id="nw-u" style="margin-top:5px"></div></div>
     <div><label>শুরু</label><select class="in" id="nw-t">${tpls.map((t) => `<option value="${t.key}">${esc(t.name)}</option>`).join('')}<option value="__upload">নিজের ফাইল/ZIP আপলোড</option></select></div></div>
-    <div class="grid c3" style="gap:10px"><div><label>RAM সীমা (MB, 0 = সীমাহীন)</label><input class="in" id="nw-m" type="number" min="0" value="0"></div><div><label>নিষ্ক্রিয় হলে ঘুম (সেকেন্ড, 0 = সব সময় চালু)</label><input class="in" id="nw-i" type="number" min="0" value="120"></div><div><label>দৈনিক রিকোয়েস্ট সীমা (0 = সীমাহীন)</label><input class="in" id="nw-d" type="number" min="0" value="0"></div></div>
-    <div><label>কোড (টেমপ্লেট বাছলে এখানে প্রিভিউ)</label><textarea class="in" id="nw-c" class="code" style="min-height:160px" spellcheck="false"></textarea></div>
+    <label class="row" style="gap:9px;cursor:pointer"><div class="sw on" id="nw-always"></div>সব সময় চালু রাখুন (ঘুমাবে না)</label>
+    <div><label>কোড (টেমপ্লেট বাছলে এখানে প্রিভিউ)</label><textarea class="in code" id="nw-c" spellcheck="false" style="min-height:160px"></textarea></div>
     <input type="file" id="nw-f" multiple hidden accept=".js,.mjs,.cjs,.json,.txt,.html,.css,.zip,.env,.md,.svg,.png,.jpg,.webp">
     <div class="row wrap"><button class="btn sm" id="nw-up">${ic('up')}ফাইল/ZIP বাছুন</button><span class="dim" id="nw-fl"></span></div>
     <div class="row" style="justify-content:flex-end"><button class="btn" data-x>বাতিল</button><button class="btn pri" id="nw-go">${ic('bolt')}তৈরি ও চালু</button></div>
   </div>`, true);
-  let picked = null, pickedRaw = null;
+  let picked = null;
   const prev = () => { const s = ($('#nw-n', o).value || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); $('#nw-u', o).textContent = location.origin + '/w/' + (s || '...'); };
   const fill = () => { $('#nw-c', o).disabled = $('#nw-t', o).value === '__upload'; picked = null; };
   prev(); fill();
   $('#nw-n', o).oninput = prev; $('#nw-t', o).onchange = fill;
-  $('[data-x]', o) && o.querySelectorAll('[data-x]').forEach((b) => (b.onclick = () => o.remove()));
+  o.querySelectorAll('[data-x]').forEach((b) => (b.onclick = () => o.remove()));
+  $('#nw-always', o).onclick = (e) => e.currentTarget.classList.toggle('on');
   $('#nw-up', o).onclick = () => $('#nw-f', o).click();
   $('#nw-f', o).onchange = async (e) => {
     const files = [...e.target.files]; if (!files.length) return;
@@ -377,19 +374,19 @@ function newWorkerModal() {
   };
   $('#nw-go', o).onclick = async () => {
     const name = $('#nw-n', o).value.trim(); if (!name) return toast('নাম দিন', 'bad');
-    const mem = Number($('#nw-m', o).value) || 0, idle = (Number($('#nw-i', o).value) || 0) / 60, daily = Number($('#nw-d', o).value) || 0;
-    const sel = $('#nw-t', o).value; let body = { name, memoryMb: mem, idleMin: idle, dailyLimit: daily };
+    const idleMin = $('#nw-always', o).classList.contains('on') ? 0 : 5;
+    const sel = $('#nw-t', o).value;
     if (picked && picked.zip) {
-      const created = await api('/workers', 'POST', { name, code: 'export default { fetch: () => new Response("ok") };', memoryMb: mem, idleMin: idle, dailyLimit: daily });
+      const created = await api('/workers', 'POST', { name, code: 'export default { fetch: () => new Response("ok") };', idleMin });
       if (!created.ok) return toast(created.error, 'bad');
-      const up = await fetch(`/api/workers/${created.id}/import-zip?replace=1`, { method: 'POST', body: await picked.zip.arrayBuffer(), credentials: 'same-origin', headers: localToken() });
-      const r2 = await up.json(); o.remove(); toast(r2.ok ? `ZIP খোলা হয়েছে (${r2.written}টি ফাইল)` : r2.error, r2.ok ? 'ok' : 'bad');
+      const r2 = await fetch(`/api/workers/${created.id}/import-zip?replace=1`, { method: 'POST', body: await picked.zip.arrayBuffer(), credentials: 'same-origin', headers: localToken() }).then((x) => x.json());
+      o.remove(); toast(r2.ok ? `ZIP খোলা হয়েছে (${r2.written}টি ফাইল)` : r2.error, r2.ok ? 'ok' : 'bad');
       await api(`/workers/${created.id}/deploy`, 'POST'); refresh(); go('w/' + created.id); return;
     }
+    const body = { name, idleMin };
     if (picked && picked.files) body.files = picked.files;
     else if (sel === '__upload') return toast('ফাইল বা ZIP বাছুন', 'bad');
-    else body.template = sel;
-    if (!picked && $('#nw-c', o).value.trim() && sel === '__upload') body.code = $('#nw-c', o).value;
+    else { body.template = sel; if (!tpls.find((t) => t.key === sel)) body.code = $('#nw-c', o).value; }
     const r = await api('/workers', 'POST', body);
     o.remove();
     if (!r.ok) return toast(r.error, 'bad');
@@ -426,34 +423,30 @@ function updateWorkerLive(w) {
   const set = (id, v) => { const el = $('#' + id); if (el && el.textContent !== String(v)) el.textContent = v; };
   set('wo-ram', w.ram ? nf(w.ram) + ' MB' : '0 MB'); set('wo-req', nf(w.today.req)); set('wo-err', nf(w.today.err));
   set('wo-cpu', w.cpuPerReq + ' ms'); set('wo-avg', avgMs(w.today) + ' ms');
-  const b = $('#wo-rambar'); if (b) b.style.width = (w.memoryMb ? Math.min(100, (w.ram || 0) / w.memoryMb * 100) : 0).toFixed(1) + '%';
 }
 async function wOverview(w, el) {
   const r = await api(`/workers/${w.id}?tz=${tzo()}`); if (!r.ok) return toast(r.error, 'bad');
   const a = r.agg, lat = r.lat, hr = a.hours.map((h, i) => ({ label: h.label, req: h.req, err: h.err, tick: i % 4 === 0 ? h.label : '' }));
-  const ram = w.ram || 0, lim = w.memoryMb || 0;
   el.innerHTML = `<div id="wov" class="col" style="gap:14px">
   <div class="grid k4">
-    <div class="g tile"><div class="lbl">RAM এখন</div><div class="val" id="wo-ram">${ram ? nf(ram) + ' MB' : '0 MB'}</div><div class="bar" style="margin-top:6px"><i id="wo-rambar" style="width:${lim ? Math.min(100, ram / lim * 100).toFixed(1) : 0}%"></i></div><div class="sub">${lim ? 'সীমা ' + lim + 'MB' : 'RAM সীমাহীন'} · ${w.state === 'sleeping' ? 'ঘুমন্ত, RAM খরচ নেই' : ''}</div></div>
-    <div class="g tile"><div class="lbl">আজকের রিকোয়েস্ট</div><div class="val" id="wo-req">${nf(w.today.req)}</div><div class="sub">গতকাল ${nf(w.yesterday.req)}${w.dailyLimit ? ` · সীমা ${nf(w.dailyLimit)}` : ''}</div></div>
+    <div class="g tile"><div class="lbl">RAM এখন</div><div class="val" id="wo-ram">${w.ram ? nf(w.ram) + ' MB' : '0 MB'}</div><div class="sub">সীমাহীন · ${w.state === 'sleeping' ? 'ঘুমন্ত' : 'সার্ভারের RAM অনুযায়ী'}</div></div>
+    <div class="g tile"><div class="lbl">আজকের রিকোয়েস্ট</div><div class="val" id="wo-req">${nf(w.today.req)}</div><div class="sub">গতকাল ${nf(w.yesterday.req)}</div></div>
     <div class="g tile"><div class="lbl">ত্রুটি (5xx)</div><div class="val" id="wo-err">${nf(w.today.err)}</div><div class="sub">${pct(w.today.err, w.today.req)}% ত্রুটির হার</div></div>
     <div class="g tile"><div class="lbl">CPU ও গড় সময়</div><div class="val" id="wo-cpu">${w.cpuPerReq} ms</div><div class="sub">গড় সময় <span id="wo-avg">${avgMs(w.today)} ms</span> · p95 ${lat.p95} ms</div></div>
   </div>
   <div class="grid c2"><div class="g p"><div class="h3">গত ২৪ ঘণ্টার রিকোয়েস্ট</div>${bars(hr, '#7c5cff')}</div>
-  <div class="g p"><div class="h3">মেমরি ও ঘুম</div><div class="col" style="gap:9px">
-    <div class="mut">RAM সীমা: <b>${lim ? lim + ' MB' : 'সীমাহীন'}</b> · বর্তমান: <b>${ram} MB</b></div>
-    <div class="mut">নিষ্ক্রিয় হলে ঘুমানো: <b>${w.idleMin > 0 ? Math.round(w.idleMin * 60) + ' সেকেন্ড পর' : 'সব সময় চালু (ঘুমায় না)'}</b></div>
-    <div class="mut">Cron: <b>${w.cronMin ? 'প্রতি ' + w.cronMin + ' মি (সবসময় জাগা)' : 'বন্ধ'}</b> · Rate limit: <b>${w.rateLimit ? w.rateLimit + '/মিনিট' : 'সীমাহীন'}</b> · দৈনিক: <b>${w.dailyLimit ? nf(w.dailyLimit) : 'সীমাহীন'}</b></div>
+  <div class="g p"><div class="h3">Worker তথ্য</div><div class="col" style="gap:9px">
+    <div class="mut">নিষ্ক্রিয় হলে ঘুমানো: <b>${w.idleMin > 0 ? Math.round(w.idleMin * 60) + ' সেকেন্ড পর' : 'সব সময় চালু'}</b></div>
+    <div class="mut">Cron: <b>${w.cronMin ? 'প্রতি ' + w.cronMin + ' মি' : 'বন্ধ'}</b></div>
     <div class="mut">ফাইল: <b>${w.fileCount}</b> (${kb(w.totalSize)}) · ENV: <b>${w.envCount}</b> · KV কী: <b>${w.kvKeys}</b></div>
     <div class="mut">Entry: <span class="mono">${esc(w.entry)}</span></div>
     <div class="row wrap" style="margin-top:6px"><button class="btn sm" id="ov-csv">${ic('down')}দৈনিক CSV (৩০ দিন)</button><button class="btn sm" data-tab="test">${ic('send')}রিকোয়েস্ট পাঠান</button></div>
   </div></div></div>
   <div class="grid c2"><div class="g p"><div class="h3">রিকোয়েস্টের সময়</div><div class="col" style="gap:7px">${[['p50', lat.p50], ['p95', lat.p95], ['p99', lat.p99]].map(([k, v]) => `<div class="row"><span class="mono" style="width:40px">${k}</span><div class="bar" style="flex:1"><i style="width:${Math.min(100, v / Math.max(1, lat.p99) * 100)}%"></i></div><span class="mono">${v} ms</span></div>`).join('')}</div></div>
-  <div class="g p"><div class="h3">সাম্প্রতিক রিকোয়েস্ট</div><div class="scr" style="max-height:230px;overflow:auto">${r.recent.length ? `<table class="tbl"><tr><th>সময়</th><th>মেথড</th><th>পাথ</th><th>স্ট্যাটাস</th><th>ms</th></tr>${r.recent.slice(0, 20).map((x) => `<tr><td>${new Date(x.t).toLocaleTimeString()}</td><td>${esc(x.method)}</td><td class="mono">${esc(x.path)}</td><td class="${x.status >= 500 ? 'mono' : ''}" style="color:${x.status >= 500 ? 'var(--bad)' : x.status >= 400 ? 'var(--warn)' : 'var(--ok)'}">${x.status}</td><td>${x.ms}</td></tr>`).join('')}</table>` : '<div class="mut">এখনো কোনো রিকোয়েস্ট আসেনি</div>'}</div></div></div></div>`;
+  <div class="g p"><div class="h3">সাম্প্রতিক রিকোয়েস্ট</div><div class="scr" style="max-height:230px;overflow:auto">${r.recent.length ? `<table class="tbl"><tr><th>সময়</th><th>মেথড</th><th>পাথ</th><th>স্ট্যাটাস</th><th>ms</th></tr>${r.recent.slice(0, 20).map((x) => `<tr><td>${new Date(x.t).toLocaleTimeString()}</td><td>${esc(x.method)}</td><td class="mono">${esc(x.path)}</td><td style="color:${x.status >= 500 ? 'var(--bad)' : x.status >= 400 ? 'var(--warn)' : 'var(--ok)'}">${x.status}</td><td>${x.ms}</td></tr>`).join('')}</table>` : '<div class="mut">এখনো কোনো রিকোয়েস্ট আসেনি</div>'}</div></div></div></div>`;
   $('#ov-csv', el).onclick = async () => { try { saveBlob(await apiBlob(`/workers/${w.id}/stats.csv?tz=${tzo()}`), w.slug + '-daily.csv'); } catch (e) { toast(e.message, 'bad'); } };
   el.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => go(`w/${w.id}/${b.dataset.tab}`)));
 }
-
 /* ফাইল ম্যানেজার */
 const FX = { files: [], cur: null, open: new Set(), dirty: false, entry: '' };
 function wTree(files) { const root = { dirs: {}, files: [] }; for (const f of files) { const p = f.path.split('/'); let n = root; for (let i = 0; i < p.length - 1; i++) n = (n.dirs[p[i]] ||= { dirs: {}, files: [], path: p.slice(0, i + 1).join('/') }); n.files.push(f); } return root; }
@@ -627,32 +620,29 @@ function wTest(w, el) {
 }
 /* সেটিংস (Worker) */
 function wSettings(w, el) {
+  const always = !(w.idleMin > 0);
   el.innerHTML = `<div class="grid c2"><div class="g p"><div class="h3">সাধারণ</div><div class="col">
     <div><label>নাম</label><input class="in" id="s-n" value="${esc(w.name)}"></div>
     <div><label>URL নাম (/w/...)</label><input class="in" id="s-s" value="${esc(w.slug)}"></div>
-    <div><label>কাস্টম ডোমেইন (ঐচ্ছিক, DNS আপনার হোস্টের দিকে হতে হবে)</label><input class="in" id="s-d" value="${esc(w.domain || '')}" placeholder="api.example.com"></div>
-    <div class="grid c2" style="gap:10px"><div><label>Cron মিনিট (0=বন্ধ, চালু থাকলে ঘুমাবে না)</label><input class="in" id="s-c" type="number" min="0" max="1440" value="${w.cronMin}"></div><div><label>Rate limit (প্রতি IP/মিনিট, 0 = সীমাহীন)</label><input class="in" id="s-r" type="number" min="0" value="${w.rateLimit || 0}"></div></div>
-    <div><label>এন্ট্রি ফাইল</label><input class="in" id="s-e" value="${esc(w.entry)}"></div>
+    <div><label>কাস্টম ডোমেইন (ঐচ্ছিক)</label><input class="in" id="s-d" value="${esc(w.domain || '')}" placeholder="api.example.com"></div>
+    <div class="grid c2" style="gap:10px"><div><label>Cron মিনিট (0 = বন্ধ)</label><input class="in" id="s-c" type="number" min="0" value="${w.cronMin}"></div><div><label>এন্ট্রি ফাইল</label><input class="in" id="s-e" value="${esc(w.entry)}"></div></div>
+    <label class="row" style="gap:9px;cursor:pointer"><div class="sw ${always ? 'on' : ''}" id="s-always"></div>সব সময় চালু রাখুন (ঘুমাবে না)</label>
+    <div id="s-idlewrap" class="${always ? 'hide' : ''}"><label>নিষ্ক্রিয় হলে ঘুমাবে (সেকেন্ড)</label><input class="in" id="s-i" type="number" min="5" value="${Math.round((w.idleMin || 5) * 60)}"></div>
+    <label class="row" style="gap:9px;cursor:pointer"><div class="sw ${w.strictTests ? 'on' : ''}" id="s-strict"></div>ডিপ্লয়ের পর tests.json চালাও, ব্যর্থ হলে আগের ভার্সনে ফিরবে</label>
     <button class="btn pri" id="s-save" style="align-self:flex-start">${ic('check')}সেভ</button></div></div>
-  <div class="g p"><div class="h3">রিসোর্স ও সুরক্ষা</div><div class="col">
-    <div class="grid c2" style="gap:10px"><div><label>RAM সীমা (MB, 0 = সীমাহীন)</label><input class="in" id="s-m" type="number" min="0" value="${w.memoryMb || 0}"></div><div><label>নিষ্ক্রিয় হলে ঘুম (সেকেন্ড, 0 = সব সময় চালু)</label><input class="in" id="s-i" type="number" min="0" value="${Math.round((w.idleMin || 0) * 60)}"></div></div>
-    <div class="grid c2" style="gap:10px"><div><label>দৈনিক রিকোয়েস্ট সীমা (0 = সীমাহীন)</label><input class="in" id="s-dl" type="number" min="0" value="${w.dailyLimit || 0}"></div><div><label>একসাথে সর্বোচ্চ অনুরোধ (0 = সীমাহীন)</label><input class="in" id="s-cc" type="number" min="0" value="${w.concurrency || 0}"></div></div>
-    <div class="grid c2" style="gap:10px"><div><label>বাজেট: সর্বোচ্চ p95 (ms, 0=বন্ধ)</label><input class="in" id="s-bp" type="number" min="0" value="${(w.budget && w.budget.p95Ms) || 0}"></div><div><label>বাজেট: সর্বোচ্চ ত্রুটি % (0=বন্ধ)</label><input class="in" id="s-be" type="number" min="0" max="100" value="${(w.budget && w.budget.errPct) || 0}"></div></div>
-    <label class="row" style="gap:9px"><div class="sw ${w.strictTests ? 'on' : ''}" id="s-strict"></div>ডিপ্লয়ের পর tests.json চালাও, ব্যর্থ হলে আগের ভার্সনে ফিরবে</label>
-    <div class="row wrap"><button class="btn sm" id="s-unl">সব সীমা সীমাহীন করুন</button><button class="btn sm" id="s-always">সব সময় চালু রাখুন</button></div><div class="dim">RAM সীমা বদলালে Worker রিস্টার্ট হবে। সীমাহীন মানে কোনো সীমা নেই, তাই হোস্টের RAM বেশি লাগতে পারে।</div></div></div></div>
-  <div class="g p" style="margin-top:14px"><div class="h3">অ্যাকশন</div><div class="row wrap"><button class="btn sm" id="s-clone">${ic('copy')}ক্লোন</button><button class="btn sm" id="s-exp">${ic('down')}ZIP নামান</button><span class="sp"></span><button class="btn bad sm" id="s-del">${ic('trash')}মুছুন</button></div></div>`;
-  $('#s-unl').onclick = () => { $('#s-m').value = 0; $('#s-cc').value = 0; $('#s-dl').value = 0; $('#s-c').value = $('#s-c').value; toast('সীমা শূন্য করা হয়েছে (সেভ করুন)', 'ok'); };
-  $('#s-always').onclick = () => { $('#s-i').value = 0; toast('সব সময় চালু (সেভ করুন)', 'ok'); };
-  let strict = !!w.strictTests; $('#s-strict').onclick = (e) => { strict = !strict; e.currentTarget.classList.toggle('on', strict); };
+  <div class="g p"><div class="h3">অ্যাকশন</div><div class="col" style="gap:10px"><div class="dim">RAM, CPU, অনুরোধ ও সময়ের কোনো সীমা নেই। সার্ভারের যতটুকু আছে ততটুকু ব্যবহার হবে।</div><div class="row wrap"><button class="btn sm" id="s-clone">${ic('copy')}ক্লোন</button><button class="btn sm" id="s-exp">${ic('down')}ZIP নামান</button></div><div class="sp"></div><button class="btn bad sm" id="s-del" style="align-self:flex-start">${ic('trash')}মুছুন</button></div></div></div>`;
+  let strict = !!w.strictTests, idleOn = always;
+  $('#s-strict').onclick = (e) => { strict = !strict; e.currentTarget.classList.toggle('on', strict); };
+  $('#s-always').onclick = (e) => { idleOn = !idleOn; e.currentTarget.classList.toggle('on', idleOn); $('#s-idlewrap').classList.toggle('hide', idleOn); };
   $('#s-save').onclick = async () => {
-    const body = { name: $('#s-n').value.trim(), slug: $('#s-s').value.trim(), domain: $('#s-d').value.trim(), cronMin: $('#s-c').value, rateLimit: $('#s-r').value, entry: $('#s-e').value.trim(), concurrency: $('#s-cc').value, memoryMb: $('#s-m').value, idleMin: (Number($('#s-i').value) || 0) / 60, dailyLimit: $('#s-dl').value, strictTests: strict, budget: { p95Ms: $('#s-bp').value, errPct: $('#s-be').value } };
+    const idleMin = idleOn ? 0 : (Number($('#s-i').value) || 300) / 60;
+    const body = { name: $('#s-n').value.trim(), slug: $('#s-s').value.trim(), domain: $('#s-d').value.trim(), cronMin: $('#s-c').value, entry: $('#s-e').value.trim(), idleMin, strictTests: strict };
     const r = await api(`/workers/${w.id}`, 'PATCH', body); r.ok ? toast('সেভ হয়েছে', 'ok') : toast(r.error, 'bad'); refresh(); if (r.ok && body.slug !== w.slug) go('w/' + w.id + '/settings');
   };
   $('#s-clone').onclick = async () => { const r = await api(`/workers/${w.id}/clone`, 'POST', { name: w.name + ' copy' }); if (!r.ok) return toast(r.error, 'bad'); toast('ক্লোন তৈরি (বন্ধ অবস্থায়)', 'ok'); refresh(); go('w/' + r.id); };
   $('#s-exp').onclick = async () => { try { saveBlob(await apiBlob(`/workers/${w.id}/export`), w.slug + '.zip'); } catch (e) { toast(e.message, 'bad'); } };
   $('#s-del').onclick = () => confirmBox(`"${w.name}", তার সব ফাইল, ভার্সন ও ডাটাবেস মুছে যাবে।`, async () => { await api(`/workers/${w.id}`, 'DELETE'); toast('মুছে ফেলা হয়েছে', 'ok'); go('workers'); refresh(); });
 }
-
 /* ---------- AI Gateway ---------- */
 let GW_PRESETS = [];
 const GW_LABEL = { ok: 'সক্রিয়', cooldown: 'বিরতিতে', nocredit: 'ক্রেডিট শেষ', invalid: 'key ভুল', error: 'ত্রুটি', untested: 'যাচাই হয়নি' };
@@ -704,7 +694,7 @@ async function renderGateway(onlyLive) {
     <pre class="term" style="height:auto;margin-top:12px;font-size:12px;white-space:pre-wrap">curl ${esc(ep)}/chat/completions -H "Authorization: Bearer ${esc(gw.key || 'mcgw_...')}" -H "Content-Type: application/json" -d '{"model":"${esc(gw.model)}","stream":true,"messages":[{"role":"user","content":"হ্যালো"}]}'</pre>
   </div>
   <div class="g p"><div class="row wrap" style="margin-bottom:6px"><div class="h3" style="margin:0;flex:1">বিশ্লেষণ (গত ২৪ ঘণ্টা)</div><span class="dim" id="gw-tot"></span></div><div id="gw-chart"></div><div class="row wrap" style="margin-top:8px;gap:12px"><span class="dim"><span style="color:var(--a2)">■</span> সফল</span><span class="dim"><span style="color:var(--bad)">■</span> ব্যর্থ</span></div><div id="gw-models" style="margin-top:12px"></div></div>
-  <div class="g p"><div class="row wrap" style="margin-bottom:10px"><div class="h3" style="margin:0;flex:1">Provider ও মডেল</div><button class="btn sm" id="gw-all">${ic('bolt')}সব পরীক্ষা</button></div><div id="gw-list"></div></div>
+  <div class="g p"><div class="row wrap" style="margin-bottom:10px"><div class="h3" style="margin:0;flex:1">Provider ও মডেল</div><input class="in" id="gw-mf" placeholder="মডেল খুঁজুন" style="max-width:200px"><button class="btn sm" id="gw-all">${ic('bolt')}সব পরীক্ষা</button></div><div id="gw-list"></div></div>
   <div class="g p"><div class="h3">নতুন provider যোগ করুন</div>
     <div class="grid c2" style="gap:10px">
       <div><label>ধরন</label><select class="in" id="gw-pre">${GW_PRESETS.map((p) => `<option value="${p.key}" data-url="${esc(p.baseUrl)}">${esc(p.name)}</option>`).join('')}</select></div>
@@ -714,15 +704,16 @@ async function renderGateway(onlyLive) {
     </div>
     <div class="row wrap" style="margin-top:10px"><button class="btn pri sm" id="gw-add">${ic('plus')}যোগ ও মডেল লোড</button><span class="dim">যোগ হলে মডেলের তালিকা আসে; মডেল বেছে সক্রিয় করুন।</span></div>
   </div>
+  ${sdkCard(ep, gw)}
   <div class="g p"><div class="h3">লাইভ ইতিহাস</div><div id="gw-hist"></div></div>
-  <div class="g p"><div class="h3">স্ট্রিমিং পরীক্ষা (আসল সময়ে)</div><div class="row"><input class="in" id="gw-q" placeholder="একটি প্রশ্ন লিখুন..."><button class="btn pri sm" id="gw-go">${ic('send')}</button></div><div id="gw-ans" style="margin-top:10px;white-space:pre-wrap;line-height:1.7"></div></div>
+  ${playCard(gw)}
   </div>`;
   bindGateway(); paintGwLive();
 }
 function gwCard(p) {
   const models = (p.models && p.models.length ? p.models : p.useModels || []).slice(0, 300);
   const st = (m) => (p.modelState || []).find((x) => x.model === m) || {};
-  const chips = models.map((m) => { const s = st(m); const on = (p.useModels || []).includes(m); return `<label class="pill" style="cursor:pointer;${s.current ? 'border-color:var(--a2)' : ''}"><input type="checkbox" data-gmc="${p.id}" value="${esc(m)}" ${on ? 'checked' : ''}> ${esc(m)}${s.cooling ? ' <span style="color:var(--warn)">বিরতি</span>' : ''}${s.current ? ' <span style="color:var(--a2)">চলছে</span>' : ''}</label>`; }).join('');
+  const chips = models.map((m) => { const s = st(m); const on = (p.useModels || []).includes(m); return `<label class="pill gw-chip" data-m="${esc(m)}" style="cursor:pointer;${s.current ? 'border-color:var(--a2)' : ''}"><input type="checkbox" data-gmc="${p.id}" value="${esc(m)}" ${on ? 'checked' : ''}> ${esc(m)}${s.cooling ? ' <span style="color:var(--warn)">বিরতি</span>' : ''}${s.current ? ' <span style="color:var(--a2)">চলছে</span>' : ''}</label>`; }).join('');
   return `<div class="g p" style="${p.cooling ? '' : ''}">
     <div class="row"><span class="pill mono">#${p.no}</span><b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</b>${gwPill(p.status)}</div>
     <div class="dim mono" style="margin-top:6px;overflow:hidden;text-overflow:ellipsis">${esc(p.baseUrl)} · ${esc(p.keyMask)}</div>
@@ -743,7 +734,7 @@ function paintGwLive() {
   const nxt = gw.providers.find((p) => (p.modelState || []).some((x) => x.current));
   const list = $('#gw-list'); if (list) list.innerHTML = gw.providers.length ? `<div class="grid c2">${gw.providers.map(gwCard).join('')}</div>` : '<div class="g empty">কোনো provider নেই। নিচে যোগ করুন।</div>';
   const hist = $('#gw-hist'); if (hist) hist.innerHTML = gw.history.length ? `<table class="tbl"><tr><th>সময়</th><th>Provider</th><th>মডেল</th><th>ফলাফল</th><th>ms</th><th>ফলব্যাক</th><th>উৎস</th></tr>${gw.history.slice(0, 60).map((x) => `<tr><td>${new Date(x.t).toLocaleTimeString()}</td><td>${esc(x.provider)} <span class="dim">#${x.pno || '-'}</span></td><td class="mono">${esc(x.model || '')}</td><td style="color:${x.ok ? 'var(--ok)' : 'var(--bad)'};white-space:normal;max-width:300px">${x.ok ? 'সফল' : esc(x.err || 'ব্যর্থ')}</td><td>${x.ms}</td><td>${x.fallbacks || 0}</td><td>${esc(x.src || '')}</td></tr>`).join('')}</table>` : '<div class="mut">এখনো কোনো অনুরোধ নেই</div>';
-  void nxt;
+  void nxt; applyModelFilter();
 }
 function bindGateway() {
   $('#gw-cpep').onclick = () => copyText($('#gw-ep').value);
@@ -763,11 +754,7 @@ function bindGateway() {
     $('#gw-key').value = ''; $('#gw-name').value = ''; refresh(); renderGateway(false);
   };
   $('#gw-all').onclick = async () => { toast('সব provider পরীক্ষা হচ্ছে...', 'ok'); await api('/gateway/test-all', 'POST'); toast('পরীক্ষা শেষ', 'ok'); refresh(); };
-  $('#gw-go').onclick = async () => {
-    const q = $('#gw-q').value.trim(); if (!q) return; const out = $('#gw-ans'); out.innerHTML = '<span class="dim">উত্তর আসছে...</span>';
-    let text = ''; try { await streamTo('/api/gateway/chat-stream', { text: q }, (piece) => { text += piece; out.textContent = text; }); if (!text) out.innerHTML = '<span class="dim">খালি উত্তর</span>'; } catch (e) { out.innerHTML = `<span style="color:var(--bad)">${esc(e.message)}</span>`; }
-    refresh();
-  };
+  bindGatewayExtras();
   $('#gw-q').onkeydown = (e) => { if (e.key === 'Enter') $('#gw-go').click(); };
   const list = $('#gw-list');
   list.onchange = async (e) => {
@@ -801,6 +788,38 @@ async function loadFcm() {
   el.querySelectorAll('[data-ftd]').forEach((b) => (b.onclick = async () => { await api('/fcm/tokens/' + b.dataset.ftd, 'DELETE'); loadFcm(); }));
   el.querySelectorAll('[data-fev]').forEach((sw) => (sw.onclick = async () => { const k = sw.dataset.fev; await api('/fcm/events', 'PUT', { [k]: !sw.classList.contains('on') }); loadFcm(); }));
   $('#fcm-test').onclick = async () => { const x = await api('/fcm/test', 'POST'); x.ok ? toast(`পাঠানো হয়েছে: ${x.sent}টি device` + (x.failed ? `, ${x.failed}টি ব্যর্থ` : ''), 'ok') : toast(x.error, 'bad'); };
+}
+function playCard(gw) {
+  const models = [...new Set((gw.providers || []).flatMap((p) => p.useModels || []))];
+  const opts = ['<option value="">স্বয়ংক্রিয় (ঘূর্ণন)</option>'].concat(models.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`)).join('');
+  return `<div class="g p"><div class="row wrap" style="margin-bottom:8px"><div class="h3" style="margin:0;flex:1">Playground (লাইভ পরীক্ষা)</div><select class="in" id="gw-pm" style="max-width:260px">${opts}</select><label class="row" style="gap:7px;margin:0;cursor:pointer"><div class="sw on" id="gw-ps"></div>স্ট্রিম</label></div>
+  <div class="row"><input class="in" id="gw-q" placeholder="একটি প্রশ্ন লিখুন..."><button class="btn pri sm" id="gw-go">${ic('send')}</button></div>
+  <div id="gw-ans" style="margin-top:10px;white-space:pre-wrap;line-height:1.7;min-height:24px"></div></div>`;
+}
+function sdkCard(ep, gw) {
+  const key = 'mcgw_...'; const model = gw.model;
+  const py = `from openai import OpenAI\nclient = OpenAI(base_url="${ep}", api_key="${key}")\nstream = client.chat.completions.create(\n    model="${model}",\n    messages=[{"role": "user", "content": "হ্যালো"}],\n    stream=True,\n)\nfor chunk in stream:\n    print(chunk.choices[0].delta.content or "", end="")`;
+  const js = `import OpenAI from "openai";\nconst client = new OpenAI({ baseURL: "${ep}", apiKey: "${key}" });\nconst stream = await client.chat.completions.create({\n  model: "${model}",\n  messages: [{ role: "user", content: "হ্যালো" }],\n  stream: true,\n});\nfor await (const chunk of stream) process.stdout.write(chunk.choices[0]?.delta?.content || "");`;
+  const curl = `curl ${ep}/chat/completions \\\n  -H "Authorization: Bearer ${key}" -H "Content-Type: application/json" \\\n  -d '{"model":"${model}","stream":true,"messages":[{"role":"user","content":"হ্যালো"}]}'`;
+  window.GW_SN = { py, js, curl };
+  return `<div class="g p"><div class="row wrap" style="margin-bottom:8px"><div class="h3" style="margin:0;flex:1">SDK উদাহরণ (আপনার endpoint ও model সহ)</div><select class="in" id="gw-sdk" style="max-width:160px"><option value="py">Python</option><option value="js">Node.js</option><option value="curl">curl</option></select></div><pre class="term" id="gw-snip" style="height:auto;white-space:pre-wrap;font-size:12px">${esc(py)}</pre><div class="dim">${key} এর জায়গায় আপনার পূর্ণ Gateway key বসান।</div></div>`;
+}
+function applyModelFilter() { const q = window.GW_MF || ''; document.querySelectorAll('.gw-chip').forEach((c) => { c.style.display = !q || (c.dataset.m || '').toLowerCase().includes(q) ? '' : 'none'; }); }
+function bindGatewayExtras() {
+  const sdk = $('#gw-sdk'); if (sdk) sdk.onchange = () => { const s = (window.GW_SN || {})[sdk.value]; $('#gw-snip').textContent = s || ''; };
+  const mf = $('#gw-mf'); if (mf) mf.oninput = () => { window.GW_MF = mf.value.trim().toLowerCase(); applyModelFilter(); };
+  const ps = $('#gw-ps'); if (ps) ps.onclick = (e) => e.currentTarget.classList.toggle('on');
+  $('#gw-go').onclick = async () => {
+    const q = $('#gw-q').value.trim(); if (!q) return;
+    const out = $('#gw-ans'); const model = $('#gw-pm').value; const stream = $('#gw-ps').classList.contains('on');
+    const body = { messages: [{ role: 'user', content: q }], stream, model: model || undefined };
+    out.innerHTML = '<span class="dim">উত্তর আসছে...</span>';
+    try {
+      if (stream) { let text = ''; out.textContent = ''; await streamTo('/api/gateway/playground', body, (piece) => { text += piece; out.textContent = text; }); if (!text) out.innerHTML = '<span class="dim">খালি উত্তর</span>'; }
+      else { const r = await api('/gateway/playground', 'POST', body); out.innerHTML = r.ok ? `<div class="dim" style="margin-bottom:6px">${esc(r.provider)} · ${esc(r.model)} · ${r.latency} ms · ফলব্যাক ${r.fallbacks}</div>${esc(r.text)}` : `<span style="color:var(--bad)">${esc(r.error)}</span>`; }
+    } catch (e) { out.innerHTML = `<span style="color:var(--bad)">${esc(e.message)}</span>`; }
+    refresh();
+  };
 }
 /* ---------- সেটিংস ---------- */
 function renderSettings(onlyLive) {
@@ -886,19 +905,7 @@ async function start() {
   if (location.hash.includes('gdrive=')) { const m = location.hash.match(/gdrive=(ok|err:(.*))/); history.replaceState(null, '', location.pathname + '#/settings'); if (m) setTimeout(() => toast(m[1] === 'ok' ? 'Google Drive সংযুক্ত' : 'সংযোগ ব্যর্থ: ' + decodeURIComponent(m[2] || ''), m[1] === 'ok' ? 'ok' : 'bad'), 500); renderCurrent(false); }
 }
 (function () { try { const t = localStorage.getItem('mch-theme'); if (t) document.documentElement.dataset.theme = t; const a = localStorage.getItem('mch-accent'); if (a) document.documentElement.dataset.accent = a; } catch { /* ignore */ } })();
-/* ব্যাকগ্রাউন্ড (হালকা, কম CPU) */
-(function () {
-  const cv = document.getElementById('fx'); if (!cv || (matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
-  const ctx = cv.getContext('2d'); let w = 0, h = 0, t0 = 0; const dpr = Math.min(1.25, devicePixelRatio || 1);
-  const size = () => { w = innerWidth; h = innerHeight; cv.width = w * dpr; cv.height = h * dpr; cv.style.width = w + 'px'; cv.style.height = h + 'px'; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
-  addEventListener('resize', size); size();
-  const parts = Array.from({ length: 36 }, () => ({ x: Math.random(), y: Math.random(), z: Math.random() * .8 + .2, v: Math.random() * .00005 + .00002, p: Math.random() * 6.28 }));
-  const frame = (now) => { requestAnimationFrame(frame); if (document.hidden || now - t0 < 50) return; t0 = now; ctx.clearRect(0, 0, w, h); const light = document.documentElement.dataset.theme === 'light'; const cs = getComputedStyle(document.documentElement); const c = ['--a1', '--a2', '--a3'].map((k) => cs.getPropertyValue(k).trim() || '#7c5cff');
-    ctx.globalCompositeOperation = light ? 'multiply' : 'lighter';
-    for (const p of parts) { p.y -= p.v * 14; if (p.y < -.05) { p.y = 1.05; p.x = Math.random(); } const a = (.3 + .3 * Math.sin(now / 900 + p.p)) * p.z * (light ? .5 : 1); ctx.fillStyle = c[(p.p * 10 | 0) % 3]; ctx.globalAlpha = a; ctx.beginPath(); ctx.arc(p.x * w, p.y * h, p.z * 2, 0, 6.283); ctx.fill(); }
-    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; };
-  requestAnimationFrame(frame);
-})();
+
 start();
 </script>
 </body>

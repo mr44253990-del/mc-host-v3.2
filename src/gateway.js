@@ -121,8 +121,10 @@ class Gateway extends EventEmitter {
   remove(id) { this.cfg().providers = this.providers().filter((p) => p.id !== id); for (const k of [...this.cool.keys()]) if (k === id || k.startsWith(id + '|')) this.cool.delete(k); this.store.save(); }
 
   // ----- রাউটিং -----
-  _plan() {
-    const all = this.entries(); const n = all.length;
+  _plan(opts = {}) {
+    let all = this.entries();
+    if (opts.model) all = all.filter((e) => e.model === opts.model);
+    const n = all.length;
     if (!n) throw new Error('কোনো সক্রিয় provider/মডেল নেই (provider যোগ করে মডেল বাছুন)');
     if (this.cfg().strategy === 'roundrobin') { // শুধু সক্রিয় entry-গুলোর মধ্যে ঘোরে
       const avail = all.filter((e) => !this.isCool(e));
@@ -134,12 +136,12 @@ class Gateway extends EventEmitter {
     const order = [...all.slice(start), ...all.slice(0, start)].filter((e) => !this.isCool(e));
     return { all, order };
   }
-  async _pick() {
-    let plan = this._plan();
+  async _pick(opts = {}) {
+    let plan = this._plan(opts);
     if (!plan.order.length) {
       const ends = this.entries().map((e) => this.isCool(e)).filter(Boolean);
       const wait = ends.length ? Math.min(...ends) - Date.now() : Infinity;
-      if (wait > 0 && wait <= 90000) { await new Promise((r) => setTimeout(r, wait + 50)); plan = this._plan(); }
+      if (wait > 0 && wait <= 90000) { await new Promise((r) => setTimeout(r, wait + 50)); plan = this._plan(opts); }
       if (!plan.order.length) throw new Error('সব provider/মডেল এখন বিরতিতে; বিরতি শেষে স্বয়ংক্রিয়ভাবে আবার চেষ্টা হবে');
     }
     return plan;
@@ -173,7 +175,7 @@ class Gateway extends EventEmitter {
 
   // ----- সাধারণ (নন-স্ট্রিম) চ্যাট -----
   async chat(messages, opts = {}) {
-    const plan = await this._pick(); const chain = [];
+    const plan = await this._pick(opts); const chain = [];
     for (const e of plan.order) {
       const idx = plan.all.indexOf(e), pno = idx + 1, t0 = Date.now();
       try {
@@ -203,7 +205,7 @@ class Gateway extends EventEmitter {
     return 'data: ' + JSON.stringify(j) + '\n\n';
   }
   async *streamChat(messages, opts = {}) {
-    const plan = await this._pick(); const chain = [];
+    const plan = await this._pick(opts); const chain = [];
     for (const e of plan.order) {
       const idx = plan.all.indexOf(e), pno = idx + 1, t0 = Date.now(); let started = false; let usage = null; let content = '';
       try {
@@ -249,6 +251,31 @@ class Gateway extends EventEmitter {
         }
         if (err.status === 400) { this._record(e, { ok: false, ms: Date.now() - t0, pno, fallbacks: chain.length, src: opts.src, err: err.message }); throw err; }
         const k = this._fail(e, err, Date.now() - t0, pno, chain.length, opts.src);
+        chain.push(`${e.p.name}/${e.model} (${k.label})`);
+        this.ptr = (idx + 1) % plan.all.length;
+      }
+    }
+    const msg = 'সব provider ব্যর্থ: ' + chain.join(' → ');
+    this.emit('allfail', msg); throw new Error(msg);
+  }
+
+  // ----- Embeddings / ছবি: একই ফলব্যাক পথে সাধারণ POST (path যেমন /embeddings) -----
+  async forward(path, body, opts = {}) {
+    const want = body && body.model && body.model !== this.cfg().model ? body.model : null;
+    const plan = await this._pick({ model: want || undefined });
+    const chain = [];
+    for (const e of plan.order) {
+      const idx = plan.all.indexOf(e), pno = idx + 1, t0 = Date.now();
+      try {
+        const r = await this._http(e.p, path, { method: 'POST', body: JSON.stringify({ ...body, model: e.model }), timeout: opts.timeout || 120000 });
+        if (!r.ok) throw this.toErr(r);
+        const ms = Date.now() - t0;
+        this._record(e, { ok: true, ms, usage: r.json && r.json.usage, pno, fallbacks: chain.length, src: opts.src || 'api' });
+        this.ptr = idx;
+        return { json: r.json, provider: e.p.name, model: e.model, providerNo: pno, fallbacks: chain.length, latency: ms };
+      } catch (err) {
+        if (err.status === 400) { this._record(e, { ok: false, ms: Date.now() - t0, pno, fallbacks: chain.length, src: opts.src || 'api', err: err.message }); throw err; }
+        const k = this._fail(e, err, Date.now() - t0, pno, chain.length, opts.src || 'api');
         chain.push(`${e.p.name}/${e.model} (${k.label})`);
         this.ptr = (idx + 1) % plan.all.length;
       }
