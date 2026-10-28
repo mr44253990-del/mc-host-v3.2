@@ -1,10 +1,17 @@
 {
-  "name": "MC Host",
-  "short_name": "MC Host",
-  "description": "Minecraft বট ও Worker নিয়ন্ত্রণ প্যানেল",
+  "name": "NeuroHub",
+  "short_name": "NeuroHub",
+  "description": "AI Gateway ও Workers নিয়ন্ত্রণ",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#070914",
   "theme_color": "#070914",
-  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }

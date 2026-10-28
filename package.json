@@ -1,7 +1,7 @@
 {
-  "name": "mc-host-workers",
-  "version": "3.4.0",
-  "description": "Workers-only hosting panel: upload, run, monitor and back up Workers (low RAM)",
+  "name": "neurohub",
+  "version": "3.5.0",
+  "description": "NeuroHub: AI gateway (free/premium providers, models, images) + Workers hosting",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"

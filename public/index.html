@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#070914">
-<title>MC Host · Workers</title>
+<title>NeuroHub</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <style>
@@ -112,7 +112,7 @@ label{display:block;font-size:12px;color:var(--t3);margin:0 0 6px}
 <div id="login" class="hide">
   <div class="g">
     <div class="logo" style="margin:0 auto 16px;width:52px;height:52px;border-radius:17px"><svg class="i" viewBox="0 0 24 24" style="width:24px;height:24px"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></div>
-    <h2 style="margin:0 0 4px">MC Host Workers</h2>
+    <h2 style="margin:0 0 4px">NeuroHub</h2>
     <p class="mut" style="margin:0 0 18px">অ্যাডমিন পাসওয়ার্ড দিয়ে প্রবেশ করুন</p>
     <form id="lgf" novalidate>
       <input id="pw" class="in" type="password" placeholder="পাসওয়ার্ড" autocomplete="current-password" autocapitalize="off" enterkeyhint="go">
@@ -125,7 +125,7 @@ label{display:block;font-size:12px;color:var(--t3);margin:0 0 6px}
 
 <div id="app" class="hide">
   <aside class="g">
-    <div class="brand"><div class="logo"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></div><div><h1>MC Host</h1><small>Workers</small></div></div>
+    <div class="brand"><div class="logo"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></div><div><h1>NeuroHub</h1><small>Workers</small></div></div>
     <nav id="nav" class="col" style="gap:5px"></nav>
     <div class="sp"></div>
     <div id="side-st" class="pill" style="margin:0 6px 8px"></div>
@@ -787,7 +787,7 @@ async function loadFcm() {
   $('#fcm-add').onclick = async () => { const x = await api('/fcm/tokens', 'POST', { token: $('#fcm-tok').value.trim(), name: $('#fcm-tn').value.trim() }); if (!x.ok) return toast(x.error, 'bad'); toast('Device যোগ হয়েছে', 'ok'); loadFcm(); };
   el.querySelectorAll('[data-ftd]').forEach((b) => (b.onclick = async () => { await api('/fcm/tokens/' + b.dataset.ftd, 'DELETE'); loadFcm(); }));
   el.querySelectorAll('[data-fev]').forEach((sw) => (sw.onclick = async () => { const k = sw.dataset.fev; await api('/fcm/events', 'PUT', { [k]: !sw.classList.contains('on') }); loadFcm(); }));
-  $('#fcm-test').onclick = async () => { const x = await api('/fcm/test', 'POST'); x.ok ? toast(`পাঠানো হয়েছে: ${x.sent}টি device` + (x.failed ? `, ${x.failed}টি ব্যর্থ` : ''), 'ok') : toast(x.error, 'bad'); };
+  $('#fcm-test').onclick = async () => { const x = await api('/fcm/test', 'POST'); const rr = (x.result || {}); if (!x.ok) return toast(x.error, 'bad'); const bad = (rr.results || []).find((q) => !q.ok); toast(bad ? `${rr.sent||0}টি পাঠানো, ব্যর্থ: ${bad.hint || bad.error}` : `${rr.sent||0}টি device-এ পাঠানো`, bad ? 'bad' : 'ok'); };
 }
 function playCard(gw) {
   const models = [...new Set((gw.providers || []).flatMap((p) => p.useModels || []))];

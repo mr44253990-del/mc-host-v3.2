@@ -12,6 +12,8 @@ const sys = require('./sys');
 const insights = require('./insights');
 const Gateway = require('./gateway');
 const FCM = require('./fcm');
+const Notifier = require('./notify');
+const Telegram = require('./telegram');
 const { genId } = require('./util');
 const TEMPLATES = require('./worker-templates');
 
@@ -58,20 +60,24 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
   const audit = (req, type, detail = '') => { const a = (store.data.audit ||= []); a.push({ t: Date.now(), ip: req.ip || '', type, detail: String(detail).slice(0, 160) }); if (a.length > 150) a.splice(0, a.length - 150); store.save(); };
   const origin = (req) => `${req.protocol}://${req.get('host')}`;
   const guard = (fn) => async (req, res) => { try { await fn(req, res); } catch (e) { fail(res, e.message || 'ত্রুটি', 500); } };
-  const ADMIN_ONLY = /^\/(tokens|settings|password|backup|restore|gdrive|hooks|reports|ai\/settings|gateway|fcm)(\/|$)/;
+  const ADMIN_ONLY = /^\/(tokens|settings|password|backup|restore|gdrive|hooks|reports|ai\/settings|gateway|fcm|notify|telegram)(\/|$)/;
 
   const workers = new Workers(store, { max: MAX_WK });
   const ai = new Ai(store, workers);
   const gw = new Gateway(store);
   ai.gateway = gw; gw.ensureKey();
   const fcm = new FCM(store);
-  gw.on('allfail', (msg) => fcm.notify('allfail', 'AI Gateway: সব provider ব্যর্থ', msg.slice(0, 300), 'allfail:' + msg.slice(0, 80)));
+  const notifier = new Notifier(store, fcm);
+  const tg = new Telegram(store, gw, { onLog: (m) => console.log('[telegram]', m) });
+  notifier.tg = tg;
+  gw.on('event', (e) => { notifier.send(e.type, e.title, e.body, e.key).catch(() => {}); });
   workers.on('event', (ev) => {
     const n = ev.worker ? ev.worker.name : '';
-    if (ev.type === 'down') fcm.notify('down', `Worker বন্ধ: ${n}`, String(ev.reason || 'ত্রুটি').slice(0, 300), 'down:' + ev.worker.id);
-    else if (ev.type === 'up') fcm.notify('up', `Worker আবার চালু: ${n}`, 'স্বয়ংক্রিয়ভাবে ফিরে এসেছে', 'up:' + ev.worker.id);
-    else if (ev.type === 'errorrate') fcm.notify('errorrate', `ত্রুটির হার বেশি: ${n}`, `${ev.errors} / ${ev.total} রিকোয়েস্ট ত্রুটি`, 'errorrate:' + ev.worker.id);
+    if (ev.type === 'down') notifier.send('down', `Worker বন্ধ: ${n}`, String(ev.reason || 'ত্রুটি').slice(0, 300), 'down:' + ev.worker.id).catch(() => {});
+    else if (ev.type === 'up') notifier.send('up', `Worker আবার চালু: ${n}`, 'স্বয়ংক্রিয়ভাবে ফিরে এসেছে', 'up:' + ev.worker.id).catch(() => {});
+    else if (ev.type === 'errorrate') notifier.send('errorrate', `ত্রুটির হার বেশি: ${n}`, `${ev.errors} / ${ev.total} রিকোয়েস্ট ত্রুটি`, 'errorrate:' + ev.worker.id).catch(() => {});
   });
+  if (tg.cfg().token && tg.cfg().enabled) tg.start();
   const gd = new GDrive(store);
   const withWk = (fn) => guard(async (req, res) => { const w = workers.get(req.params.id); if (!w) return fail(res, 'Worker পাওয়া যায়নি', 404); return fn(w, req, res); });
   const tzOf = (req) => Number(req.query.tz) || 0;
@@ -123,40 +129,34 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
     if (!gw.checkKey(tok)) { res.status(401).json({ error: { message: 'Gateway key ভুল বা নেই', type: 'invalid_request_error' } }); return false; }
     return true;
   };
-  app.get('/v1/models', (req, res) => { if (!v1Auth(req, res)) return; res.json({ object: 'list', data: [{ id: gw.cfg().model, object: 'model', created: 0, owned_by: 'mc-host' }] }); });
-  app.post('/v1/embeddings', guard(async (req, res) => {
-    if (!v1Auth(req, res)) return;
-    if (!req.body || req.body.input === undefined) return res.status(400).json({ error: { message: 'input দিন', type: 'invalid_request_error' } });
-    try { const r = await gw.forward('/embeddings', req.body, { src: 'api' }); res.setHeader('x-mc-provider', encodeURIComponent(r.provider)); res.json(r.json); }
-    catch (e) { res.status(e.status === 400 ? 400 : 503).json({ error: { message: e.message, type: 'gateway_error' } }); }
-  }));
-  app.post('/v1/images/generations', guard(async (req, res) => {
-    if (!v1Auth(req, res)) return;
-    if (!req.body || !req.body.prompt) return res.status(400).json({ error: { message: 'prompt দিন', type: 'invalid_request_error' } });
-    try { const r = await gw.forward('/images/generations', req.body, { src: 'api', timeout: 180000 }); res.setHeader('x-mc-provider', encodeURIComponent(r.provider)); res.json(r.json); }
-    catch (e) { res.status(e.status === 400 ? 400 : 503).json({ error: { message: e.message, type: 'gateway_error' } }); }
-  }));
+  const v1Err = (res, e) => res.status(e.status === 400 ? 400 : (e.status === 404 ? 404 : 503)).json({ error: { message: e.message, type: 'gateway_error' } });
+  app.get('/v1/models', (req, res) => { if (!v1Auth(req, res)) return; res.json(gw.openaiModels()); });
   app.post('/v1/chat/completions', guard(async (req, res) => {
     if (!v1Auth(req, res)) return;
     const b = req.body || {};
     if (!Array.isArray(b.messages) || !b.messages.length) return res.status(400).json({ error: { message: 'messages দিন', type: 'invalid_request_error' } });
-    const messages = b.messages.slice(-80);
-    const opts = { max_tokens: Number(b.max_tokens) || 1500, temperature: b.temperature, src: 'api' };
-    if (b.stream) { // আসল স্ট্রিম: প্রথম চাঙ্ক আসার আগে ব্যর্থ হলে পরেরটায় যায়
-      const it = gw.streamChat(messages, opts)[Symbol.asyncIterator]();
-      let first;
-      try { first = await it.next(); } catch (e) { return res.status(e.status === 400 ? 400 : 503).json({ error: { message: e.message, type: 'gateway_error' } }); }
+    if (b.stream) {
+      const it = gw.streamChat(b, { src: 'api' })[Symbol.asyncIterator]();
+      let first; try { first = await it.next(); } catch (e) { return v1Err(res, e); }
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'x-accel-buffering': 'no' });
       try { if (!first.done) res.write(first.value); for (;;) { const n = await it.next(); if (n.done) break; res.write(n.value); } }
       catch (e) { res.write(`data: ${JSON.stringify({ error: { message: e.message } })}\n\n`); res.write('data: [DONE]\n\n'); }
       return res.end();
     }
-    let r;
-    try { r = await gw.chat(messages, opts); }
-    catch (e) { return res.status(e.status === 400 ? 400 : 503).json({ error: { message: e.message, type: 'gateway_error' } }); }
-    const id = 'chatcmpl-' + genId() + genId(); const created = Math.floor(Date.now() / 1000);
-    res.setHeader('x-mc-provider', encodeURIComponent(r.provider)); res.setHeader('x-mc-fallbacks', String(r.fallbacks));
-    res.json({ id, object: 'chat.completion', created, model: gw.cfg().model, choices: [{ index: 0, message: { role: 'assistant', content: r.text }, finish_reason: 'stop' }], usage: { prompt_tokens: r.usage.prompt_tokens || 0, completion_tokens: r.usage.completion_tokens || 0, total_tokens: r.usage.total_tokens || 0 }, x_provider_no: r.providerNo, x_model: r.model, x_fallbacks: r.fallbacks });
+    try { const r = await gw.chat(b, { src: 'api' }); res.setHeader('x-mc-provider', encodeURIComponent(r.provider)); res.setHeader('x-mc-tier', r.tier); res.setHeader('x-mc-fallbacks', String(r.fallbacks)); res.json(r.json); }
+    catch (e) { v1Err(res, e); }
+  }));
+  app.post('/v1/images/generations', guard(async (req, res) => {
+    if (!v1Auth(req, res)) return;
+    if (!req.body || !req.body.prompt) return res.status(400).json({ error: { message: 'prompt দিন', type: 'invalid_request_error' } });
+    try { const r = await gw.image(req.body, { src: 'api' }); res.setHeader('x-mc-provider', encodeURIComponent(r.provider)); res.json(r.json); }
+    catch (e) { v1Err(res, e); }
+  }));
+  app.post('/v1/embeddings', guard(async (req, res) => {
+    if (!v1Auth(req, res)) return;
+    if (!req.body || req.body.input === undefined) return res.status(400).json({ error: { message: 'input দিন', type: 'invalid_request_error' } });
+    try { const r = await gw.forward('/embeddings', req.body, { src: 'api' }); res.setHeader('x-mc-provider', encodeURIComponent(r.provider)); res.json(r.json); }
+    catch (e) { v1Err(res, e); }
   }));
 
   // ---------- পাবলিক: Google Drive OAuth কলব্যাক ----------
@@ -243,20 +243,28 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
   // ---------- AI Gateway (শুধু মালিক) ----------
   app.get('/api/gateway', (req, res) => ok(res, { gateway: gw.summary(origin(req)), presets: gw.presets() }));
   app.post('/api/gateway/key/rotate', (req, res) => { const k = gw.rotateKey(); audit(req, 'gateway-key-rotate', ''); ok(res, { key: k }); });
+  app.put('/api/gateway/key', (req, res) => { try { gw.setKey((req.body || {}).key); audit(req, 'gateway-key-set', ''); ok(res); } catch (e) { fail(res, e.message); } });
   app.put('/api/gateway/settings', (req, res) => {
     const b = req.body || {}; const c = gw.cfg();
-    if (typeof b.model === 'string' && b.model.trim()) c.model = b.model.trim().slice(0, 80);
-    if (b.strategy === 'sticky' || b.strategy === 'roundrobin') c.strategy = b.strategy;
-    if (typeof b.systemPrompt === 'string') c.systemPrompt = b.systemPrompt.slice(0, 4000);
-    store.save(); ok(res);
+    try {
+      if (typeof b.model === 'string' && b.model.trim()) c.model = b.model.trim().slice(0, 80);
+      if (b.strategy === 'sticky' || b.strategy === 'roundrobin') c.strategy = b.strategy;
+      if (b.mode !== undefined) gw.setMode(b.mode);
+      if (typeof b.modeFallback === 'boolean') c.modeFallback = b.modeFallback;
+      if (typeof b.systemPrompt === 'string') c.systemPrompt = b.systemPrompt.slice(0, 4000);
+      if (b.ctxMode === 'auto' || b.ctxMode === 'off') c.ctxMode = b.ctxMode;
+      const num = { hedgeMs: [0, 60000], firstTokenMs: [1000, 300000], timeoutMs: [5000, 600000], ctxTokens: [0, 1000000], slowMs: [1000, 600000] };
+      for (const [k, [lo, hi]] of Object.entries(num)) if (b[k] !== undefined) c[k] = Math.max(lo, Math.min(hi, Math.round(Number(b[k]) || 0)));
+      store.save(); ok(res);
+    } catch (e) { fail(res, e.message); }
   });
-  app.get('/api/gateway/backup', (req, res) => { res.setHeader('Content-Disposition', 'attachment; filename="mc-host-ai-gateway.json"'); res.json(gw.backup()); });
-  app.post('/api/gateway/restore', express.json({ limit: '5mb' }), guard(async (req, res) => { const r = gw.restore(req.body); audit(req, 'gateway-restore', r.providers + ' providers'); ok(res, r); }));
+  app.get('/api/gateway/backup', (req, res) => { res.setHeader('Content-Disposition', 'attachment; filename="neurohub-ai-gateway.json"'); res.json(gw.backup()); });
+  app.post('/api/gateway/restore', express.json({ limit: '8mb' }), guard(async (req, res) => { const r = gw.restore(req.body); audit(req, 'gateway-restore', r.providers + ' providers'); ok(res, r); }));
+  app.get('/api/gateway/merged', (req, res) => ok(res, { llm: gw.merged(req.query.mode || gw.cfg().mode, 'llm'), image: gw.merged(req.query.mode || gw.cfg().mode, 'image') }));
   app.post('/api/gateway/providers', guard(async (req, res) => {
     let p; try { p = gw.addProvider(req.body || {}); } catch (e) { return fail(res, e.message); }
-    await gw.test(p);
-    audit(req, 'gateway-add', p.name);
-    ok(res, { id: p.id, status: p.status, models: p.models || [], lastError: p.lastError });
+    await gw.test(p); audit(req, 'gateway-add', p.name);
+    ok(res, { id: p.id, status: p.status, models: p.models || [], lastError: p.lastError, tier: p.tier });
   }));
   app.patch('/api/gateway/providers/:id', (req, res) => {
     const p = gw.find(req.params.id); if (!p) return fail(res, 'provider নেই', 404);
@@ -265,47 +273,50 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
     if (Array.isArray(b.useModels)) gw.setModels(p, b.useModels);
     if (b.enabled !== undefined) p.enabled = !!b.enabled;
     if (b.name !== undefined) p.name = String(b.name).trim().slice(0, 40) || p.name;
+    if (b.tier !== undefined) gw.setTier(p, b.tier);
     if (b.apiKey !== undefined && String(b.apiKey).trim().length >= 8) { p.apiKey = String(b.apiKey).trim(); p.status = 'untested'; gw.cool.delete(p.id); }
     store.save(); ok(res);
   });
+  app.post('/api/gateway/providers/:id/move', (req, res) => { gw.move(req.params.id, Number((req.body || {}).dir) || 1); ok(res); });
   app.delete('/api/gateway/providers/:id', (req, res) => { gw.remove(req.params.id); audit(req, 'gateway-remove', req.params.id); ok(res); });
   app.post('/api/gateway/providers/:id/test', guard(async (req, res) => { const p = gw.find(req.params.id); if (!p) return fail(res, 'provider নেই', 404); await gw.test(p); ok(res, { status: p.status, lastError: p.lastError, models: p.models || [], latency: p.latency, credits: p.credits }); }));
-  // Playground: মডেল, প্যারামিটার ও স্ট্রিম/নন-স্ট্রিম সহ পুরো গেটওয়ে পথে পরীক্ষা
+  app.post('/api/gateway/test-all', guard(async (req, res) => { for (const p of gw.providers()) await gw.test(p); ok(res); }));
+  const clientFrom = (b) => {
+    const msgs = Array.isArray(b.messages) && b.messages.length ? b.messages.slice(-200) : [{ role: 'user', content: String(b.text || '') }];
+    if (!msgs.some((m) => m && m.content)) return null;
+    const c = { messages: msgs }; if (b.model) c.model = String(b.model);
+    for (const k of ['temperature', 'max_tokens', 'top_p']) if (b[k] !== undefined && b[k] !== '') c[k] = Number(b[k]);
+    return c;
+  };
   app.post('/api/gateway/playground', guard(async (req, res) => {
-    const b = req.body || {};
-    const msgs = Array.isArray(b.messages) && b.messages.length ? b.messages.slice(-80) : [{ role: 'user', content: String(b.text || '') }];
-    if (!msgs.some((m) => m && m.content)) return fail(res, 'মেসেজ ফাঁকা');
-    const opts = { model: b.model && b.model !== gw.cfg().model ? String(b.model) : undefined, temperature: b.temperature, max_tokens: Number(b.max_tokens) || undefined, src: 'panel' };
-    if (!b.stream) { try { const r = await gw.chat(msgs, opts); ok(res, r); } catch (e) { fail(res, e.message, 503); } return; }
-    const it = gw.streamChat(msgs, opts)[Symbol.asyncIterator]();
-    let first; try { first = await it.next(); } catch (e) { return fail(res, e.message, 503); }
-    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', 'x-accel-buffering': 'no' });
-    try { if (!first.done) res.write(first.value); for (;;) { const n = await it.next(); if (n.done) break; res.write(n.value); } }
-    catch (e) { res.write(`data: ${JSON.stringify({ error: { message: e.message } })}\n\n`); }
-    res.end();
+    const c = clientFrom(req.body || {}); if (!c) return fail(res, 'মেসেজ ফাঁকা');
+    try { ok(res, await gw.chat(c, { src: 'panel' })); } catch (e) { fail(res, e.message, e.status === 404 ? 404 : 503); }
   }));
   app.post('/api/gateway/chat-stream', guard(async (req, res) => {
-    const text = String((req.body || {}).text || '').trim(); if (!text) return fail(res, 'মেসেজ ফাঁকা');
-    const it = gw.streamChat([{ role: 'user', content: text }], { src: 'panel' })[Symbol.asyncIterator]();
+    const c = clientFrom(req.body || {}); if (!c) return fail(res, 'মেসেজ ফাঁকা');
+    const it = gw.streamChat(c, { src: 'panel' })[Symbol.asyncIterator]();
     let first; try { first = await it.next(); } catch (e) { return fail(res, e.message, 503); }
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', 'x-accel-buffering': 'no' });
     try { if (!first.done) res.write(first.value); for (;;) { const n = await it.next(); if (n.done) break; res.write(n.value); } }
     catch (e) { res.write(`data: ${JSON.stringify({ error: { message: e.message } })}\n\n`); }
     res.end();
   }));
-  // Firebase Cloud Messaging
-  app.get('/api/fcm', (req, res) => ok(res, { fcm: fcm.status() }));
+  // নোটিফিকেশন কেন্দ্র
+  app.get('/api/notify', (req, res) => ok(res, { notify: notifier.status(), fcm: fcm.status(), telegram: { connected: !!tg.cfg().token, enabled: !!tg.cfg().enabled, botName: tg.cfg().botName, paired: !!tg.cfg().ownerId, pair: tg.cfg().pair || '', alerts: tg.cfg().alerts !== false } }));
+  app.put('/api/notify/events', (req, res) => { notifier.setEvents(req.body || {}); ok(res); });
+  app.put('/api/notify/channels', (req, res) => { notifier.setChannels(req.body || {}); ok(res); });
+  app.post('/api/notify/test', guard(async (req, res) => { const r = await notifier.send('test', 'NeuroHub: পরীক্ষা', 'নোটিফিকেশন ঠিকভাবে পৌঁছাচ্ছে', 'test:' + Date.now(), { force: true }); ok(res, { result: r }); }));
+  // FCM
   app.post('/api/fcm/service-account', (req, res) => { try { const r = fcm.setServiceAccount((req.body || {}).json); audit(req, 'fcm-sa', r.projectId); ok(res, r); } catch (e) { fail(res, e.message); } });
-  app.delete('/api/fcm/service-account', (req, res) => { fcm.clearServiceAccount(); audit(req, 'fcm-sa-remove', ''); ok(res); });
+  app.delete('/api/fcm/service-account', (req, res) => { fcm.clearServiceAccount(); ok(res); });
   app.post('/api/fcm/tokens', (req, res) => { try { fcm.addToken((req.body || {}).token, (req.body || {}).name); ok(res); } catch (e) { fail(res, e.message); } });
   app.delete('/api/fcm/tokens/:id', (req, res) => { fcm.removeToken(req.params.id); ok(res); });
-  app.put('/api/fcm/events', (req, res) => { fcm.setEvents(req.body || {}); ok(res); });
-  app.post('/api/fcm/test', guard(async (req, res) => { const r = await fcm.send('MC Host: পরীক্ষা', 'নোটিফিকেশন ঠিকভাবে পৌঁছাচ্ছে', { force: true, data: { type: 'test' } }); if (r.skipped) return fail(res, r.skipped === 'not-configured' ? 'আগে service account JSON ও device token যোগ করুন' : r.skipped); ok(res, r); }));
-  app.post('/api/gateway/test-all', guard(async (req, res) => { for (const p of gw.providers()) await gw.test(p); ok(res); }));
-  app.post('/api/gateway/chat', guard(async (req, res) => {
-    const text = String((req.body || {}).text || '').trim(); if (!text) return fail(res, 'মেসেজ ফাঁকা');
-    try { const r = await gw.chat([{ role: 'user', content: text }], { src: 'panel' }); ok(res, r); } catch (e) { fail(res, e.message, 503); }
-  }));
+  app.post('/api/fcm/test', guard(async (req, res) => { const r = await fcm.send('NeuroHub: পরীক্ষা', 'FCM নোটিফিকেশন পৌঁছাচ্ছে', { data: { type: 'test' } }); ok(res, { result: r }); }));
+  // Telegram
+  app.post('/api/telegram/connect', guard(async (req, res) => { try { const r = await tg.connect((req.body || {}).token); audit(req, 'telegram-connect', r.botName); ok(res, r); } catch (e) { fail(res, e.message); } }));
+  app.post('/api/telegram/disconnect', (req, res) => { tg.disconnect(); ok(res); });
+  app.put('/api/telegram/alerts', (req, res) => { tg.setAlerts((req.body || {}).alerts); ok(res); });
+  app.post('/api/telegram/test', guard(async (req, res) => { try { await tg.alert('🔔 NeuroHub: পরীক্ষা বার্তা'); ok(res); } catch (e) { fail(res, e.message); } }));
 
   // ---------- টোকেন ও সেটিংস (শুধু মালিক) ----------
   app.get('/api/tokens', (req, res) => ok(res, { tokens: store.data.tokens.map((t) => ({ id: t.id, name: t.name, scope: t.scope, createdAt: t.createdAt, lastUsed: t.lastUsed || 0 })) }));
