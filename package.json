@@ -1,6 +1,6 @@
 {
   "name": "neurohub",
-  "version": "3.5.0",
+  "version": "3.6.0",
   "description": "NeuroHub: AI gateway (free/premium providers, models, images) + Workers hosting",
   "main": "index.js",
   "scripts": {

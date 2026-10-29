@@ -14,6 +14,8 @@ const EVENTS = {
   up: { label: 'Worker আবার চালু', def: true },
   errorrate: { label: 'Worker-এ ত্রুটির হার বেশি', def: true },
   test: { label: 'টেস্ট', def: true },
+  drive: { label: 'Google Drive ব্যাকআপ সফল', def: true },
+  drive_fail: { label: 'Google Drive ব্যাকআপ ব্যর্থ', def: true },
 };
 
 class Notifier {
