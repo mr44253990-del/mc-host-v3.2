@@ -11,6 +11,7 @@ const { genId } = require('./util');
 
 const PRESETS = [
   { key: 'openrouter', kind: 'llm', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', free: true, keyUrl: 'https://openrouter.ai/keys', note: 'মডেলের নামের শেষে :free থাকলে সেটি ফ্রি' },
+  { key: 'zai', kind: 'llm', name: 'Z.ai (GLM)', baseUrl: 'https://api.z.ai/api/paas/v4', keyUrl: 'https://z.ai/manage-apikey/apikey-list', note: 'base URL বা পূর্ণ .../chat/completions, দুটোই চলবে' },
   { key: 'groq', kind: 'llm', name: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', free: true, keyUrl: 'https://console.groq.com/keys', note: 'ফ্রি টিয়ার আছে (সীমাসহ)' },
   { key: 'gemini', kind: 'llm', name: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', free: true, keyUrl: 'https://aistudio.google.com/apikey', note: 'ফ্রি টিয়ার আছে (সীমাসহ)' },
   { key: 'cerebras', kind: 'llm', name: 'Cerebras', baseUrl: 'https://api.cerebras.ai/v1', free: true, keyUrl: 'https://cloud.cerebras.ai', note: 'ফ্রি টিয়ার আছে (সীমাসহ)' },
@@ -51,6 +52,12 @@ const CTX_RE = /context.{0,24}(length|window)|maximum context|too (long|large)|e
 const PASS = ['temperature', 'top_p', 'max_tokens', 'max_completion_tokens', 'stop', 'presence_penalty', 'frequency_penalty', 'seed', 'response_format', 'tools', 'tool_choice', 'parallel_tool_calls', 'logit_bias', 'user', 'n', 'logprobs', 'top_logprobs', 'reasoning_effort', 'stream_options', 'functions', 'function_call'];
 const HIST_MAX = 400;
 const tryJson = (s) => { try { return JSON.parse(s); } catch { return null; } };
+// যেকোনো URL থেকে base বের করে: .../v4/chat/completions -> .../v4
+function normBase(u) {
+  let s = String(u || '').trim().replace(/\s+/g, '').replace(/\/+$/, '');
+  s = s.replace(/\/(chat\/completions|completions|models|embeddings|images\/generations|responses)$/i, '');
+  return s.replace(/\/+$/, '');
+}
 const p95 = (a) => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(s.length * 0.95))]; };
 const norm = (m) => String(m || '').toLowerCase().replace(/:free$/, '').split('/').pop().trim();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -187,7 +194,7 @@ class Gateway extends EventEmitter {
   // ----- provider ব্যবস্থাপনা -----
   addProvider({ preset, name, baseUrl, apiKey, tier }) {
     const pr = PRESETS.find((x) => x.key === preset) || PRESETS.find((x) => x.key === 'custom');
-    const url = String(baseUrl || pr.baseUrl || '').trim().replace(/\/$/, '');
+    const url = normBase(baseUrl || pr.baseUrl || '');
     if (!/^https:\/\//i.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(url)) throw new Error('Base URL অবশ্যই https:// দিয়ে শুরু হবে');
     const key = String(apiKey || '').trim();
     if (!pr.noKey && key.length < 8) throw new Error('API key দিন');
@@ -242,6 +249,24 @@ class Gateway extends EventEmitter {
     p.credits = (await this.credits(p)) || p.credits || null;
     this.store.save();
     return p;
+  }
+  // একটি নির্দিষ্ট মডেল পরীক্ষা (provider-এর সব মডেল না)
+  async testModel(p, model) {
+    const m = String(model || p.model || '').trim(); if (!m) throw new Error('মডেলের নাম দিন');
+    const t0 = Date.now(); p.modelStatus ||= {};
+    try {
+      const r = await this._http(p, '/chat/completions', { method: 'POST', body: JSON.stringify({ model: m, messages: [{ role: 'user', content: 'ping' }], max_tokens: 5 }), timeout: 45000 });
+      if (!r.ok) throw this.toErr(r);
+      p.modelStatus[m] = { ok: true, ms: Date.now() - t0, at: Date.now(), error: '' };
+    } catch (e) { p.modelStatus[m] = { ok: false, ms: Date.now() - t0, at: Date.now(), error: String(e.message || e).slice(0, 200) }; }
+    this.store.save();
+    return { model: m, ...p.modelStatus[m] };
+  }
+  addModels(p, names) {
+    const add = (Array.isArray(names) ? names : [names]).map((x) => String(x || '').trim()).filter(Boolean).slice(0, 50);
+    p.useModels = [...new Set([...(p.useModels || []), ...add])].slice(0, 200);
+    if (!p.model && p.useModels.length) p.model = p.useModels[0];
+    this.store.save(); return p.useModels;
   }
   async healthPass() {
     for (const p of this.providers()) {
@@ -591,7 +616,7 @@ class Gateway extends EventEmitter {
     const c = this.cfg(); c.providers = []; this.cool.clear(); this.ptrs.clear();
     for (const x of data.providers.slice(0, 80)) {
       try {
-        const url = String(x.baseUrl || '').trim().replace(/\/$/, ''); if (!/^https?:\/\//i.test(url)) continue;
+        const url = normBase(x.baseUrl); if (!/^https?:\/\//i.test(url)) continue;
         c.providers.push({ id: crypto.randomBytes(5).toString('hex'), preset: String(x.preset || 'custom'), kind: x.kind === 'image' ? 'image' : 'llm', adapter: x.adapter === 'pollinations' ? 'pollinations' : 'openai', name: String(x.name || 'Provider').slice(0, 40), baseUrl: url, apiKey: String(x.apiKey || ''), noAuth: !!x.noAuth, tier: x.tier === 'premium' ? 'premium' : 'free', model: String(x.model || ''), useModels: Array.isArray(x.useModels) ? x.useModels.map(String).slice(0, 100) : [], models: Array.isArray(x.models) ? x.models.map(String).slice(0, 300) : [], ctx: {}, enabled: x.enabled !== false, status: 'untested', lastError: '', latency: 0, lastTested: 0, credits: null, stats: { req: 0, ok: 0, fail: 0, tokens: 0 }, addedAt: Date.now() });
       } catch { /* বাদ */ }
     }

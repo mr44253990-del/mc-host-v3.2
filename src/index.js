@@ -269,7 +269,10 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
   app.get('/api/gateway/merged', (req, res) => ok(res, { llm: gw.merged(req.query.mode || gw.cfg().mode, 'llm'), image: gw.merged(req.query.mode || gw.cfg().mode, 'image') }));
   app.post('/api/gateway/providers', guard(async (req, res) => {
     let p; try { p = gw.addProvider(req.body || {}); } catch (e) { return fail(res, e.message); }
-    await gw.test(p); audit(req, 'gateway-add', p.name);
+    const models = Array.isArray((req.body || {}).models) ? req.body.models : [];
+    if (models.length) gw.addModels(p, models);
+    if (!(req.body || {}).skipTest) await gw.test(p); else { p.status = 'untested'; store.save(); }
+    audit(req, 'gateway-add', p.name);
     ok(res, { id: p.id, status: p.status, models: p.models || [], lastError: p.lastError, tier: p.tier });
   }));
   app.patch('/api/gateway/providers/:id', (req, res) => {
@@ -283,6 +286,14 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
     if (b.apiKey !== undefined && String(b.apiKey).trim().length >= 8) { p.apiKey = String(b.apiKey).trim(); p.status = 'untested'; gw.cool.delete(p.id); }
     store.save(); ok(res);
   });
+  app.post('/api/gateway/providers/:id/models', (req, res) => {
+    const p = gw.find(req.params.id); if (!p) return fail(res, 'provider নেই', 404);
+    ok(res, { models: gw.addModels(p, (req.body || {}).models || (req.body || {}).model) });
+  });
+  app.post('/api/gateway/providers/:id/test-model', guard(async (req, res) => {
+    const p = gw.find(req.params.id); if (!p) return fail(res, 'provider নেই', 404);
+    ok(res, await gw.testModel(p, (req.body || {}).model));
+  }));
   app.post('/api/gateway/providers/:id/move', (req, res) => { gw.move(req.params.id, Number((req.body || {}).dir) || 1); ok(res); });
   app.delete('/api/gateway/providers/:id', (req, res) => { gw.remove(req.params.id); audit(req, 'gateway-remove', req.params.id); ok(res); });
   app.post('/api/gateway/providers/:id/test', guard(async (req, res) => { const p = gw.find(req.params.id); if (!p) return fail(res, 'provider নেই', 404); await gw.test(p); ok(res, { status: p.status, lastError: p.lastError, models: p.models || [], latency: p.latency, credits: p.credits }); }));

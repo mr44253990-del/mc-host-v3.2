@@ -720,11 +720,12 @@ async function renderGateway(onlyLive) {
     <div class="grid c2" style="gap:10px">
       <div><label>ধরন</label><select class="in" id="gw-pre">${GW_PRESETS.map((p) => `<option value="${p.key}" data-url="${esc(p.baseUrl)}" data-nokey="${p.noKey ? 1 : 0}" data-kind="${p.kind}">${esc(p.name)}${p.free ? ' · ফ্রি' : ''}</option>`).join('')}</select><div class="dim" id="gw-pn" style="margin-top:5px"></div></div>
       <div><label>নাম (ঐচ্ছিক)</label><input class="in" id="gw-name" placeholder="যেমন: Account 3"></div>
-      <div style="grid-column:1/-1"><label>Base URL</label><input class="in mono" id="gw-url" value="${esc((GW_PRESETS[0] || {}).baseUrl || '')}"></div>
+      <div style="grid-column:1/-1"><label>Base URL</label><input class="in mono" id="gw-url" value="${esc((GW_PRESETS[0] || {}).baseUrl || '')}"><div class="dim" style="margin-top:4px">base URL (যেমন https://api.z.ai/api/paas/v4) বা পূর্ণ .../chat/completions, দুটোই দিতে পারেন। স্বয়ংক্রিয়ভাবে ঠিক হবে।</div></div>
+      <div style="grid-column:1/-1"><label>মডেলের নাম (কমা দিয়ে, ঐচ্ছিক; পরীক্ষা ছাড়াও সেভ হবে)</label><input class="in mono" id="gw-models-in" placeholder="glm-4.5, glm-4-flash"></div>
       <div><label>API key</label><input class="in mono" id="gw-key" type="password" autocomplete="off" placeholder="provider-এর key"></div>
       <div><label>ধরন (ফ্রি/প্রিমিয়াম)</label><select class="in" id="gw-tier"><option value="free">ফ্রি</option><option value="premium">প্রিমিয়াম</option></select></div>
     </div>
-    <div class="row wrap" style="margin-top:10px"><button class="btn pri sm" id="gw-add">${ic('plus')}যোগ ও পরীক্ষা</button><a class="btn sm" id="gw-keyurl" href="#" target="_blank" rel="noopener" style="display:none">${ic('link')}key কোথায় পাবেন</a></div>
+    <div class="row wrap" style="margin-top:10px"><label class="row" style="gap:7px;margin:0;cursor:pointer"><input type="checkbox" id="gw-skip"> পরীক্ষা ছাড়া যোগ করুন</label><button class="btn pri sm" id="gw-add">${ic('plus')}যোগ ও পরীক্ষা</button><a class="btn sm" id="gw-keyurl" href="#" target="_blank" rel="noopener" style="display:none">${ic('link')}key কোথায় পাবেন</a></div>
   </div>
   <div class="g p"><div class="h3">সমস্যা (এখন)</div><div id="gw-prob"></div></div>
   <div class="g p"><div class="h3">বিশ্লেষণ (গত ২৪ ঘণ্টা)</div><div class="row wrap dim" id="gw-tot" style="margin-bottom:6px"></div><div id="gw-chart"></div><div id="gw-models" style="margin-top:12px"></div></div>
@@ -753,6 +754,7 @@ function gwCard(p) {
     <div class="dim mono" style="margin-top:6px;overflow:hidden;text-overflow:ellipsis">${esc(p.baseUrl)} · ${esc(p.keyMask)}</div>
     <div class="row wrap" style="margin-top:8px;gap:6px"><select class="in" data-gtier="${p.id}" style="max-width:130px"><option value="free" ${p.tier === 'free' ? 'selected' : ''}>ফ্রি</option><option value="premium" ${p.tier === 'premium' ? 'selected' : ''}>প্রিমিয়াম</option></select><button class="btn sm" data-gmv="${p.id}" data-d="-1">${ic('up')}</button><button class="btn sm" data-gmv="${p.id}" data-d="1">${ic('down')}</button><span class="sp"></span><button class="btn sm" data-gt="${p.id}">${ic('bolt')}পরীক্ষা</button><button class="btn sm" data-ge="${p.id}">${p.enabled ? 'বন্ধ' : 'চালু'}</button><button class="btn bad sm" data-gd="${p.id}">${ic('trash')}</button></div>
     <div style="margin-top:10px"><div class="dim" style="margin-bottom:6px">মডেল (যেগুলো বাছবেন সেগুলো ব্যবহার হবে)</div><div class="row wrap" style="gap:6px">${chips || '<span class="dim">মডেল নেই, পরীক্ষা করুন</span>'}</div></div>
+    <div class="row wrap" style="margin-top:10px;gap:6px"><input class="in mono" data-cadd="${p.id}" placeholder="কাস্টম মডেল নাম (যেমন glm-4.5)" style="flex:1;min-width:180px"><button class="btn sm" data-cadd-btn="${p.id}">${ic('plus')}যোগ</button><button class="btn sm" data-tm="${p.id}">${ic('bolt')}মডেল টেস্ট</button></div>
     <div class="row wrap" style="margin-top:10px;gap:6px"><span class="pill">অনুরোধ ${nf(p.stats.req)}</span><span class="pill">সফল ${nf(p.stats.ok)}</span><span class="pill" style="${p.stats.fail ? 'color:var(--warn)' : ''}">ব্যর্থ ${nf(p.stats.fail)}</span>${p.latency ? `<span class="pill">${p.latency} ms</span>` : ''}${p.credits ? `<span class="pill">ক্রেডিট ${p.credits.left} / ${p.credits.total}</span>` : ''}</div>
     ${p.lastError ? `<div class="alert bad" style="margin-top:8px">${esc(p.lastError)}</div>` : ''}
     ${p.cooling ? `<div class="dim" style="margin-top:6px">বিরতি শেষ: ${new Date(p.coolUntil).toLocaleTimeString()} (তারপর আবার চেষ্টা হবে)</div>` : ''}
@@ -799,7 +801,7 @@ function bindGateway() {
   $('#gw-pre').onchange({ target: $('#gw-pre') });
   $('#gw-add').onclick = async () => {
     const b = $('#gw-add'); b.disabled = true; toast('যাচাই হচ্ছে...', 'ok');
-    const r = await api('/gateway/providers', 'POST', { preset: $('#gw-pre').value, name: $('#gw-name').value.trim(), baseUrl: $('#gw-url').value.trim(), apiKey: $('#gw-key').value.trim(), tier: $('#gw-tier').value });
+    const r = await api('/gateway/providers', 'POST', { preset: $('#gw-pre').value, name: $('#gw-name').value.trim(), baseUrl: $('#gw-url').value.trim(), apiKey: $('#gw-key').value.trim(), tier: $('#gw-tier').value, skipTest: $('#gw-skip').checked, models: ($('#gw-models-in').value || '').split(',').map((x) => x.trim()).filter(Boolean) });
     b.disabled = false;
     if (!r.ok) return toast(r.error, 'bad');
     r.status === 'ok' ? toast(`সফল: ${(r.models || []).length}টি মডেল`, 'ok') : toast('যোগ হয়েছে, কিন্তু সক্রিয় নয়: ' + (r.lastError || r.status), 'bad');
@@ -830,6 +832,8 @@ function bindGateway() {
   };
   list.onclick = async (e) => {
     const mv = e.target.closest('[data-gmv]'); if (mv) { await api(`/gateway/providers/${mv.dataset.gmv}/move`, 'POST', { dir: Number(mv.dataset.d) }); refresh(); return; }
+    const cb2 = e.target.closest('[data-cadd-btn]'); if (cb2) { const inp = list.querySelector(`[data-cadd="${cb2.dataset.caddBtn}"]`); const v = (inp && inp.value || '').trim(); if (!v) return toast('মডেলের নাম লিখুন', 'bad'); const r = await api(`/gateway/providers/${cb2.dataset.caddBtn}/models`, 'POST', { models: [v] }); r.ok ? toast('মডেল যোগ হয়েছে (টেস্ট করুন)', 'ok') : toast(r.error, 'bad'); refresh(); return; }
+    const tm = e.target.closest('[data-tm]'); if (tm) { const p = S.gateway.providers.find((x) => x.id === tm.dataset.tm); const m = (p.useModels || [])[0] || p.model; if (!m) return toast('আগে একটি মডেল যোগ করুন', 'bad'); tm.disabled = true; const r = await api(`/gateway/providers/${p.id}/test-model`, 'POST', { model: m }); tm.disabled = false; toast(r.ok ? `${m}: সফল (${r.ms} ms)` : `${m}: ব্যর্থ — ${r.error}`, r.ok ? 'ok' : 'bad'); refresh(); return; }
     const t = e.target.closest('[data-gt]'); if (t) { t.disabled = true; const r = await api(`/gateway/providers/${t.dataset.gt}/test`, 'POST'); toast(r.status === 'ok' ? `সফল · ${(r.models || []).length}টি মডেল` : 'ব্যর্থ: ' + (r.lastError || r.status), r.status === 'ok' ? 'ok' : 'bad'); refresh(); return; }
     const en = e.target.closest('[data-ge]'); if (en) { const p = S.gateway.providers.find((x) => x.id === en.dataset.ge); await api('/gateway/providers/' + p.id, 'PATCH', { enabled: !p.enabled }); refresh(); return; }
     const d = e.target.closest('[data-gd]'); if (d) confirmBox('এই provider মুছবে?', async () => { await api('/gateway/providers/' + d.dataset.gd, 'DELETE'); refresh(); });
