@@ -78,13 +78,13 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
     else if (ev.type === 'errorrate') notifier.send('errorrate', `ত্রুটির হার বেশি: ${n}`, `${ev.errors} / ${ev.total} রিকোয়েস্ট ত্রুটি`, 'errorrate:' + ev.worker.id).catch(() => {});
   });
   if (tg.cfg().token && tg.cfg().enabled) tg.start();
+  const gd = new GDrive(store);
   // Google Drive ব্যাকআপ: সফল/ব্যর্থ হলে নোটিফিকেশন
   const driveBackup = gd.backupNow.bind(gd);
   gd.backupNow = async (...args) => {
     try { const r = await driveBackup(...args); notifier.send('drive', 'Google Drive ব্যাকআপ সফল', `${r.name} · ${Math.round(r.size / 1024)} KB`, 'drive:' + r.id).catch(() => {}); return r; }
     catch (e) { notifier.send('drive_fail', 'Google Drive ব্যাকআপ ব্যর্থ', String(e.message || e).slice(0, 240), 'drive_fail:' + Date.now()).catch(() => {}); throw e; }
   };
-  const gd = new GDrive(store);
   const withWk = (fn) => guard(async (req, res) => { const w = workers.get(req.params.id); if (!w) return fail(res, 'Worker পাওয়া যায়নি', 404); return fn(w, req, res); });
   const tzOf = (req) => Number(req.query.tz) || 0;
 
