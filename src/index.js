@@ -506,21 +506,54 @@ const tplFiles = (t) => t.files || [{ path: 'worker.js', content: t.code }];
   app.put('/api/reports/settings', (req, res) => { store.setSetting('weeklyReport', !!(req.body || {}).weekly); ok(res); });
 
   // ---------- ব্যাকআপ / পুনরুদ্ধার (শুধু Worker) ----------
+  // ---------- সম্পূর্ণ ব্যাকআপ: পুরো অ্যাপ (Worker+ফাইল+ডাটাবেস, AI provider+key, FCM, Telegram, নোটিফিকেশন, হুক, সেটিং, টোকেন, Drive) ----------
+  const FULL_KIND = 'neurohub-full';
+  const sumOf = (o) => crypto.createHash('sha256').update(JSON.stringify(o)).digest('hex');
   function buildBackup() {
-    return { v: 7, ts: Date.now(), workers: JSON.parse(JSON.stringify(store.data.workers)), workerFiles: workers.exportAll(), workerDbs: workers.dbExportAll(), hooks: store.data.hooks, settings: { tzOffset: store.setting('tzOffset', null) } };
+    const payload = { v: 10, kind: FULL_KIND, app: 'NeuroHub', ts: Date.now(), state: JSON.parse(JSON.stringify(store.data)), workerFiles: workers.exportAll(), workerDbs: workers.dbExportAll() };
+    return { ...payload, sum: sumOf(payload) };
   }
-  app.get('/api/backup', (req, res) => { res.setHeader('Content-Disposition', 'attachment; filename="mc-host-backup.json"'); res.json(buildBackup()); });
+  function checkBackup(body) {
+    if (!body || typeof body !== 'object') throw new Error('ব্যাকআপ ফাইল সঠিক নয়');
+    if (body.kind === FULL_KIND) {
+      if (!body.state || typeof body.state !== 'object') throw new Error('ব্যাকআপে ডেটা নেই');
+      if (body.sum) { const { sum, ...rest } = body; if (sumOf(rest) !== sum) throw new Error('ফাইলটি বদলে গেছে (checksum মেলেনি), পুনরুদ্ধার বাতিল'); }
+      return 'full';
+    }
+    if (Array.isArray(body.workers)) return 'legacy';
+    throw new Error('এটি NeuroHub ব্যাকআপ ফাইল নয়');
+  }
+  function previewOf(body) {
+    const kind = checkBackup(body);
+    if (kind === 'legacy') return { kind, workers: body.workers.length, files: Object.keys(body.workerFiles || {}).length, hooks: (body.hooks || []).length, note: 'পুরনো Worker-only ব্যাকআপ' };
+    const s = body.state;
+    return { kind, ts: body.ts, workers: (s.workers || []).length, files: Object.keys(body.workerFiles || {}).length, providers: ((s.gateway && s.gateway.providers) || []).length, gatewayKey: !!(s.gateway && s.gateway.key), fcm: !!(s.fcm && s.fcm.sa), fcmDevices: ((s.fcm && s.fcm.tokens) || []).length, telegram: !!(s.telegram && s.telegram.token), hooks: (s.hooks || []).length, tokens: (s.tokens || []).length, drive: !!(s.gdrive && s.gdrive.refresh), notifyLog: ((s.notify && s.notify.log) || []).length };
+  }
+  app.get('/api/backup', (req, res) => { res.setHeader('Content-Disposition', `attachment; filename="neurohub-full-${new Date().toISOString().slice(0, 10)}.json"`); res.json(buildBackup()); });
+  app.post('/api/restore/preview', express.json({ limit: '80mb' }), guard(async (req, res) => ok(res, { preview: previewOf(req.body) })));
   async function doRestore(body) {
-    if (!body || !Array.isArray(body.workers)) throw new Error('ব্যাকআপ ফাইল সঠিক নয়');
-    for (const w of workers.all().slice()) await workers.remove(w.id);
-    store.data.workers = body.workers.slice(0, MAX_WK).map((w) => ({ ...w, enabled: !!w.enabled }));
-    workers.importAll(body.workerFiles || {});
-    workers.dbImportAll(body.workerDbs || {});
-    if (Array.isArray(body.hooks)) store.data.hooks = body.hooks.slice(0, 30);
-    workers._migrate(); workers.autostart(); store.save();
-    return { workers: store.data.workers.length };
+    const kind = checkBackup(body);
+    if (kind === 'legacy') {
+      for (const w of workers.all().slice()) await workers.remove(w.id);
+      store.data.workers = body.workers.slice(0, MAX_WK).map((w) => ({ ...w, enabled: !!w.enabled }));
+      workers.importAll(body.workerFiles || {}); workers.dbImportAll(body.workerDbs || {});
+      if (Array.isArray(body.hooks)) store.data.hooks = body.hooks.slice(0, 30);
+    } else {
+      for (const w of workers.all().slice()) await workers.remove(w.id);
+      for (const k of Object.keys(store.data)) delete store.data[k];
+      Object.assign(store.data, JSON.parse(JSON.stringify(body.state)));
+      for (const k of ['workers', 'tokens', 'hooks']) store.data[k] ||= [];
+      workers.importAll(body.workerFiles || {}); workers.dbImportAll(body.workerDbs || {});
+    }
+    // সেবাগুলো নতুন ডেটা দিয়ে আবার সেট
+    gw.cool.clear(); gw.ptrs.clear(); fcm.tok = null; gd.access = null; gd.busy = false;
+    tg.running = false; if (tg.cfg().token && tg.cfg().enabled) tg.start();
+    const envPwNow = clean(process.env.ADMIN_PASSWORD);
+    password = clean(store.setting('customPassword')) || envPwNow || DEFAULT_PW;
+    workers.autostart(); store.save();
+    const p = previewOf(body); return { ...p, restored: true };
   }
-  app.post('/api/restore', express.json({ limit: '60mb' }), guard(async (req, res) => ok(res, await doRestore(req.body || {}))));
+  app.post('/api/restore', express.json({ limit: '80mb' }), guard(async (req, res) => { const r = await doRestore(req.body || {}); audit(req, 'restore', r.kind); ok(res, r); }));
 
   // ---------- স্থির ফাইল (প্যানেল) ----------
   app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: 0 }));

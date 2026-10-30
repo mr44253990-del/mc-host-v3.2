@@ -893,7 +893,7 @@ function renderSettings(onlyLive) {
   <div class="g p" id="tk-card"><div class="h3">API টোকেন</div><div id="tk-list">লোড হচ্ছে...</div><div class="row wrap" style="margin-top:10px"><input class="in" id="tk-n" placeholder="টোকেনের নাম" style="max-width:200px"><select class="in" id="tk-s" style="max-width:200px"><option value="read">শুধু পড়া</option><option value="control">নিয়ন্ত্রণ</option></select><button class="btn pri sm" id="tk-add">${ic('plus')}তৈরি</button></div><div class="dim" style="margin-top:8px"><span class="mono">Authorization: Bearer mcht_...</span> হেডারে ব্যবহার করুন।</div></div></div>
   <div class="g p" id="gd-card">লোড হচ্ছে...</div>
   <div class="grid c2"><div class="g p" id="rep-card"><div class="h3">রিপোর্ট (CSV)</div><div class="row wrap"><button class="btn sm" data-rep="7">${ic('down')}৭ দিন</button><button class="btn sm" data-rep="30">${ic('down')}৩০ দিন</button><button class="btn sm" id="rep-drive">${ic('up')}Drive-এ</button></div><label class="row" style="gap:9px;margin-top:12px"><div class="sw ${S.settings.weeklyReport ? 'on' : ''}" id="rep-w"></div>প্রতি সোমবার সকাল ৯টায় Drive-এ সাপ্তাহিক রিপোর্ট</label></div>
-    <div class="g p"><div class="h3">ব্যাকআপ ও পুনরুদ্ধার (ফাইল)</div><div class="row wrap"><button class="btn sm" id="bk-dl">${ic('down')}JSON ডাউনলোড</button><button class="btn sm" id="bk-up">${ic('up')}JSON থেকে ফেরত</button><input type="file" id="bk-f" accept="application/json" hidden></div><div class="dim" style="margin-top:8px">ব্যাকআপে সব Worker, ফাইল, ENV ও SQLite ডাটা থাকে। এটি নিরাপদে রাখুন।</div></div></div>
+    <div class="g p"><div class="h3">সম্পূর্ণ ব্যাকআপ ও পুনরুদ্ধার</div><div class="dim" style="line-height:1.7;margin-bottom:10px">একটি ফাইলে পুরো অ্যাপ: সব Worker ও ফাইল ও SQLite ডাটা, সব AI provider ও মডেল ও key, Gateway key, FCM service account ও device, Telegram টোকেন ও মালিক, নোটিফিকেশন সেটিং ও লগ, হুক, সেটিং, API টোকেন, Google Drive সংযোগ। ফাইলটি অত্যন্ত গোপনীয়; নিরাপদে রাখুন।</div><div class="row wrap"><button class="btn pri sm" id="bk-dl">${ic('down')}সম্পূর্ণ ব্যাকআপ ডাউনলোড</button><button class="btn sm" id="bk-up">${ic('up')}ব্যাকআপ থেকে ফেরত</button><button class="btn sm" id="bk-drive">${ic('up')}Drive-এ এখনই</button><input type="file" id="bk-f" accept="application/json" hidden></div></div></div>
   <div class="g p" id="fcm-card">লোড হচ্ছে...</div>
   <div class="g p" id="tg-card">লোড হচ্ছে...</div>
   <div class="g p" id="hk-card">লোড হচ্ছে...</div>
@@ -947,9 +947,21 @@ function bindSettings() {
   $('#rep-w').onclick = async () => { const on = !S.settings.weeklyReport; await api('/reports/settings', 'PUT', { weekly: on }); toast(on ? 'সাপ্তাহিক রিপোর্ট চালু' : 'বন্ধ', 'ok'); refresh(); };
   document.querySelectorAll('[data-rep]').forEach((b) => (b.onclick = async () => { try { saveBlob(await apiBlob(`/reports/csv?days=${b.dataset.rep}&tz=${tzo()}`), `mc-host-workers-${b.dataset.rep}d.csv`); } catch (e) { toast(e.message, 'bad'); } }));
   $('#rep-drive').onclick = async () => { const x = await api('/reports/drive', 'POST', { days: 30, tz: tzo() }); x.ok ? toast('রিপোর্ট Drive-এ: ' + x.file.name, 'ok') : toast(x.error, 'bad'); };
-  $('#bk-dl').onclick = async () => { try { saveBlob(await apiBlob('/backup'), 'mc-host-backup.json'); } catch (e) { toast(e.message, 'bad'); } };
+  $('#bk-dl').onclick = async () => { try { saveBlob(await apiBlob('/backup'), 'neurohub-full-backup.json'); toast('ব্যাকআপ ডাউনলোড হচ্ছে', 'ok'); } catch (e) { toast(e.message, 'bad'); } };
+  $('#bk-drive').onclick = async () => { toast('Drive-এ ব্যাকআপ হচ্ছে...', 'ok'); const x = await api('/gdrive/backup', 'POST'); x.ok ? toast('Drive-এ ব্যাকআপ হয়েছে', 'ok') : toast(x.error, 'bad'); };
   $('#bk-up').onclick = () => $('#bk-f').click();
-  $('#bk-f').onchange = (e) => { const f = e.target.files[0]; if (!f) return; confirmBox('বর্তমান সব Worker বদলে ব্যাকআপ থেকে ফিরবে। নিশ্চিত?', async () => { const r = await api('/restore', 'POST', JSON.parse(await f.text())); r.ok ? toast(`ফিরেছে: ${r.workers}টি Worker`, 'ok') : toast(r.error, 'bad'); refresh(); }); e.target.value = ''; };
+  $('#bk-f').onchange = async (e) => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    let body; try { body = JSON.parse(await f.text()); } catch { return toast('ফাইলটি JSON নয়', 'bad'); }
+    const pv = await api('/restore/preview', 'POST', body); if (!pv.ok) return toast(pv.error, 'bad');
+    const p = pv.preview; const row = (k, v) => `<div class="row" style="padding:5px 0;border-bottom:1px solid var(--line)"><span style="flex:1">${k}</span><b>${v}</b></div>`;
+    const o = modal(`<h3 style="margin:0 0 6px">পুনরুদ্ধার নিশ্চিত করুন</h3><div class="dim" style="margin-bottom:10px">${p.ts ? new Date(p.ts).toLocaleString() : ''} ${p.note ? '· ' + esc(p.note) : ''}</div>
+      ${p.kind === 'legacy' ? row('Worker', p.workers) + row('ফাইল', p.files) : row('Worker', p.workers) + row('Worker ফাইল (প্রজেক্ট)', p.files) + row('AI provider', p.providers) + row('Gateway key', p.gatewayKey ? 'আছে' : 'নেই') + row('FCM service account', p.fcm ? 'আছে' : 'নেই') + row('FCM device', p.fcmDevices) + row('Telegram', p.telegram ? 'আছে' : 'নেই') + row('হুক', p.hooks) + row('API টোকেন', p.tokens) + row('Google Drive', p.drive ? 'সংযুক্ত' : 'নেই') + row('নোটিফিকেশন লগ', p.notifyLog)}
+      <div class="alert warn" style="margin:12px 0">বর্তমান সব ডেটা এই ফাইল দিয়ে বদলে যাবে। পুনরুদ্ধারের পর আবার লগইন করতে হতে পারে।</div>
+      <div class="row" style="justify-content:flex-end"><button class="btn" data-c>বাতিল</button><button class="btn pri" data-y>পুনরুদ্ধার করুন</button></div>`);
+    $('[data-c]', o).onclick = () => o.remove();
+    $('[data-y]', o).onclick = async () => { $('[data-y]', o).disabled = true; const r = await api('/restore', 'POST', body); o.remove(); r.ok ? toast('পুনরুদ্ধার সম্পন্ন', 'ok') : toast(r.error, 'bad'); setTimeout(() => location.reload(), 1200); };
+  };
 }
 function bindCommon() {
   document.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => go(b.dataset.go === 'workers/new' ? 'workers' : b.dataset.go)));

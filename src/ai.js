@@ -22,7 +22,14 @@ class Ai {
   constructor(store, workers) { this.store = store; this.workers = workers; this.pending = new Map(); }
   key() { return this.store.setting('mistralKey') || process.env.MISTRAL_API_KEY || ''; }
   model() { return this.store.setting('mistralModel') || process.env.MISTRAL_MODEL || 'mistral-small-latest'; }
-  ready() { return !!this.key() || !!(this.gateway && this.gateway.hasProviders()); }
+  ready() {
+  return !!this.key() ||
+    !!(
+      this.gateway &&
+      typeof this.gateway.hasProviders === "function" &&
+      this.gateway.hasProviders()
+    );
+}
 
   async _fetch(p, opts = {}) {
     if (!this.ready()) throw new Error('Mistral API key সেট নেই। সেটিংসে দিন।');
